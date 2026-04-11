@@ -127,6 +127,11 @@ ngrok http 8000
 # Copy the https URL into Twilio webhook settings
 ```
 
+**6. Seed demo data** (optional — populates map with sample incidents)
+```bash
+PYTHONPATH=src python3 seed_demo.py
+```
+
 Open `http://DEVICE_IP:8080` from any browser on your network.
 
 ---
