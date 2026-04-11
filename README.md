@@ -1,103 +1,69 @@
 # GridWatch
 
-**NYC Urban Intelligence & Dispatch Platform**
-
-AI-powered multi-agent dispatch system for New York City infrastructure monitoring, built on NVIDIA Nemotron running on-device via the NVIDIA GB10 Grace Blackwell Superchip.
+AI-powered urban intelligence and dispatch platform for New York City. Multi-agent system with live data feeds, predictive analytics, citizen reporting (phone/SMS/Discord), and RAG-powered dispatch chat — all running on-device with NVIDIA Nemotron via the GB10 Grace Blackwell Superchip.
 
 Built for **Spark Hack NYC 2026** (April 10-12, 2026).
 
-## Features
+---
 
-### 3D Interactive Map (Mapbox GL)
-- 3D building extrusions with incident-based coloring
-- Buildings glow based on incident category (flooding = blue, rodents = brown, noise = purple)
-- Tilted/rotated perspective with smooth camera transitions
+## Stack
 
-### Live Data Layers
-- **Incidents** - Dispatch CRM with real-time incident management
-- **Floods** - FloodNet sensor data, 311 flood reports, FEMA 2050s floodplain overlay
-- **Crashes** - NYPD motor vehicle collision data
-- **Potholes** - NYC DOT pothole reports
-- **Rodents** - 311 rodent complaints + DOH inspection data
-- **Housing** - Class C housing violations (HPD)
-- **Restaurants** - Critical health violations (DOHMH)
-- **Construction** - Active DOB permits
-- **Live Cameras** - 962 NYC DOT traffic cameras with live snapshots
-
-### AI-Powered Features
-- **Predictive Analytics** - Cross-references potholes + crash data to predict danger zones, flood risk scoring from sensor history + 311 complaints
-- **Heatmap Overlay** - Density-weighted heatmap across all data layers
-- **Cross-Correlation Engine** - Detects infrastructure events where 3+ incident types cluster (e.g., flooding + rodents + housing = infrastructure failure)
-- **Impact Radius Rings** - Visualizes affected area around confirmed incidents based on category
-- **Weather Alerts** - Live NWS alerts filtered to NYC, auto-highlights flood zones during flood warnings
-
-### Multi-Channel Citizen Reporting
-- **Phone Calls** - Call +1 (917) 993-7245, voice transcription via Twilio + Whisper
-- **SMS/Text** - Text the same number to report incidents
-- **Discord Bot** - Report via Discord with automatic geocoding
-- **Web Form** - Direct dispatch entry with map pin-drop
-
-### AI Dispatch Chat (RAG + Nemotron)
-- Natural language interface for dispatchers
-- RAG-powered with ChromaDB (1,800 NYC data documents across 6 collections)
-- Quick-action buttons: Sitrep, Critical, Floods, Noise, By Borough, Rodents, Urgent
-- Text-to-speech response output
-- Incident creation via natural language ("report flooding at 350 5th Ave")
-
-### Demo Tour
-- Automated camera tour of hotspot clusters
-- Narrated with severity levels and data correlations
-- Full layer visualization during tour
-
-## Architecture
-
-```
-Citizen Reports (Phone/SMS/Discord)
-         |
-         v
-   [Twilio / Discord Bot]
-         |
-         v
-   [FastAPI Server] <-- [Ollama + Nemotron-Mini]
-    |          |
-    |          v
-    |     [ChromaDB RAG]
-    |     (1,800 NYC docs)
-    |
-    v
-[SQLite CRM] --> [Mapbox 3D Frontend]
-                      |
-                      v
-               [NYC Open Data APIs]
-               (311, FloodNet, Crashes,
-                Potholes, Housing, etc.)
-```
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| AI Model | NVIDIA Nemotron-Mini (4.2B) via Ollama |
+| Layer | Technology |
+|---|---|
+| Frontend | Mapbox GL JS + deck.gl, port 8080 |
+| Backend | FastAPI (Python), port 8000 |
+| Database | SQLite |
+| Vector DB | ChromaDB (1,800 docs, 6 collections) |
+| AI Model | NVIDIA Nemotron-Mini 4.2B via Ollama (on-device) |
 | Hardware | NVIDIA GB10 Grace Blackwell (Acer Veriton GN100) |
-| Backend | FastAPI + Uvicorn |
-| Frontend | Mapbox GL JS + deck.gl |
-| Database | SQLite + ChromaDB (RAG) |
 | Voice/SMS | Twilio + Whisper |
-| Chat | Discord.py |
+| Chat Bot | Discord.py |
 | Tunnel | ngrok |
-| Data | NYC Open Data, FloodNet, NWS Weather API, NYC DOT Cameras |
 
-## Setup
+---
 
-### Prerequisites
-- Python 3.12+
-- Ollama with `nemotron-mini` model
-- Mapbox access token
-- Twilio account (for phone/SMS)
-- Discord bot token (for Discord intake)
-- ngrok (for Twilio webhooks)
+## Quick Start
+
+### Running on NVIDIA GB10 (Acer GN100 / DGX Spark)
+
+**1. Ollama**
+```bash
+ollama serve
+ollama pull nemotron-mini
+```
+
+**2. Backend**
+```bash
+cd hackathon-nyc-v11
+pip3 install fastapi uvicorn aiohttp chromadb pydantic requests beautifulsoup4 pyyaml --break-system-packages
+PYTHONPATH=src uvicorn hackathon_nyc.server:app --host 0.0.0.0 --port 8000
+```
+
+**3. Frontend** (separate terminal)
+```bash
+cd hackathon-nyc-v11/src/hackathon_nyc/frontend
+python3 -m http.server 8080 --bind 0.0.0.0
+```
+
+**4. Discord Bot** (separate terminal)
+```bash
+cd hackathon-nyc-v11
+export DISCORD_TOKEN=your_token_here
+PYTHONPATH=src python3 -m hackathon_nyc.discord_bot
+```
+
+**5. ngrok** (for Twilio phone/SMS)
+```bash
+ngrok http 8000
+# Copy the https URL into Twilio webhook settings
+```
+
+Open `http://DEVICE_IP:8080` from any browser on your network.
+
+---
 
 ### Environment Variables
+
 ```bash
 export DISCORD_TOKEN=your_discord_bot_token
 export TWILIO_ACCOUNT_SID=your_twilio_sid
@@ -105,95 +71,179 @@ export TWILIO_AUTH_TOKEN=your_twilio_auth_token
 export TWILIO_PHONE_NUMBER=+1234567890
 ```
 
-### Run
-```bash
-# Terminal 1: Ollama
-ollama serve
+Set your Mapbox token in `src/hackathon_nyc/frontend/index.html` (line 808).
 
-# Terminal 2: Backend
-cd hackathon-nyc-v11
-PYTHONPATH=src uvicorn hackathon_nyc.server:app --host 0.0.0.0 --port 8000
+---
 
-# Terminal 3: ngrok (for Twilio)
-ngrok http 8000
+## Features
 
-# Terminal 4: Discord bot
-PYTHONPATH=src python -m hackathon_nyc.discord_bot
+### 3D Map
+Interactive Mapbox GL map with 3D building extrusions. Buildings change color based on nearby incident type — blue for flooding, brown for rodents, purple for noise, red for heat violations. Tilted perspective with smooth camera transitions.
 
-# Open browser
-http://localhost:8000
+### Data Layers
+Each layer button loads live data from NYC Open Data APIs:
+
+| Layer | Source | What it shows |
+|---|---|---|
+| Incidents | Dispatch CRM + 311 | Noise (floating music notes), rodents (scurrying rats), flooding (water puddles), heat violations |
+| Floods | FloodNet + 311 + FEMA | Sensor readings, 311 flood reports, 2050s projected floodplain overlay |
+| Crashes | NYPD | Motor vehicle collisions with injury/fatality data |
+| Potholes | NYC DOT | Active pothole repair requests |
+| Rodents | 311 + DOH | Rodent complaints and inspection results |
+| Housing | HPD | Class C (immediately hazardous) violations |
+| Restaurants | DOHMH | Critical food safety violations |
+| Construction | DOB | Active construction permits |
+| Cameras | NYC DOT | 962 live traffic cameras with JPEG snapshots and refresh button |
+| Heatmap | All layers combined | Density-weighted heat overlay across all data |
+
+### Predict
+Cross-correlates multiple datasets to find danger zones:
+
+- **Pothole-Crash Zones** — potholes near crash sites (3.2x more crashes near potholes)
+- **311 Chronic Hotspots** — areas with 4+ recurring complaints across categories
+- **Flood Risk Scoring** — sensor flood history + sewer complaints + weather alerts
+
+### Recent
+Shows last 24 hours of all reports and dispatch incidents.
+
+### Live Mode
+Real-time feed of citizen reports from phone, SMS, and Discord. Shows source icon for each report.
+
+### Demo Tour
+Automated camera tour that flies to the top 10 hotspot clusters. Shows narration with severity levels, data correlations, and incident breakdowns at each stop. Full layer visualization during tour.
+
+### Weather Alerts
+Live NWS alerts filtered to NYC. Automatically highlights flood-prone areas during flood warnings. Deduplicated so the same alert doesn't show twice.
+
+---
+
+## AI Chat (RAG + Nemotron)
+
+Natural language dispatch interface powered by Nemotron-Mini with ChromaDB RAG.
+
+**Quick action buttons:** Sitrep, Hotspots, Floods, Open, Findings, Weather, TTS
+
+**What it does:**
+- Queries ChromaDB for relevant historical NYC data before each response
+- Geocodes locations mentioned in queries and filters results by proximity
+- Plots RAG data points on the map with emoji markers
+- Creates incidents from natural language ("report flooding at 350 5th Ave")
+- Text-to-speech output for hands-free dispatch
+
+**RAG Collections (1,800 documents):**
+
+| Collection | Documents | Content |
+|---|---|---|
+| nyc_311_current | 300 | Recent 311 service requests |
+| nyc_flood_events | 300 | FloodNet sensor flood events |
+| nyc_collisions | 300 | Motor vehicle crash records |
+| nyc_potholes | 300 | Pothole repair reports |
+| nyc_housing_violations | 300 | HPD housing violations |
+| nyc_rodent_inspections | 300 | DOH rodent inspection results |
+
+**Example queries:**
+```
+show me flood history near Brooklyn
+rat complaints in Manhattan
+crash data near Times Square
+pothole reports in Queens
+give me a sitrep
+report flooding at 200 Broadway Manhattan
 ```
 
-## Data Sources
+---
 
-All data is sourced from NYC Open Data and public APIs:
-- [NYC 311 Service Requests](https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2010-to-Present/erm2-nwe9)
-- [FloodNet Sensors](https://data.cityofnewyork.us/Environment/FloodNet-Sensors/kb2e-tjy3)
-- [Motor Vehicle Collisions](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95)
-- [DOT Potholes](https://data.cityofnewyork.us/Transportation/Pothole-Repair/x9wy-ing4)
-- [Housing Violations](https://data.cityofnewyork.us/Housing-Development/Housing-Maintenance-Code-Violations/wvxf-dwi5)
-- [Restaurant Inspections](https://data.cityofnewyork.us/Health/DOHMH-New-York-City-Restaurant-Inspection-Results/43nn-pn8j)
-- [NYC DOT Traffic Cameras](https://webcams.nyctmc.org/api/cameras/)
-- [NWS Weather Alerts](https://api.weather.gov/alerts/active?area=NY)
+## Citizen Reporting
 
-## NYC Open Data Sources Connected
+Citizens can report incidents through four channels. All reports are geocoded, categorized, and appear on the map in real time.
 
-| Dataset | API Endpoint | Records Used | Purpose |
-|---------|-------------|-------------|---------|
-| 311 Service Requests | `erm2-nwe9` | Sewer, Flooding, Noise, Rodent, Heat, Street, Tree | Primary incident feed across all complaint types |
-| FloodNet Sensors | `kb2e-tjy3` | ~200 sensors | Real-time flood depth monitoring locations |
-| FloodNet Events | `aq7i-eu5q` | 200 recent | Historical flood events with depth/duration |
-| Motor Vehicle Collisions | `h9gi-nx95` | 500 recent | Crash locations, injuries, fatalities |
-| DOT Potholes | `x9wy-ing4` | 500 recent | Pothole repair requests with geometry |
-| Rodent Inspections | `p937-wjvj` | 100 recent | DOH rodent activity inspections |
-| Housing Violations | `wvxf-dwi5` | 100 recent | HPD Class C (immediately hazardous) violations |
-| Restaurant Inspections | `43nn-pn8j` | 100 recent | DOHMH critical food safety violations |
-| Construction Permits | `rbx6-tga4` | 100 recent | Active DOB-approved construction |
-| Flood Vulnerability | `mrjc-v9pm` | 200 | NYC flood vulnerability index |
-| FEMA Floodplain | `27ya-gqtm` | Full GeoJSON | 2050s projected floodplain (NPCC 90th percentile) |
+| Channel | How | Source Icon |
+|---|---|---|
+| Phone Call | Call the Twilio number, speak your report | :telephone: |
+| SMS/Text | Text the Twilio number | :iphone: |
+| Discord | DM the bot or @mention in a channel | :speech_balloon: |
+| Web Form | Click "+ New Incident" in the dispatch sidebar | :desktop_computer: |
+
+### Live Ticker
+Scrolling ticker across the top shows the most recent reports with source icons and timestamps. Pauses on hover.
+
+### Proximity Alerts
+Subscribe to alerts for a specific address. When a new incident is created nearby, subscribers are notified via their chosen channel.
+
+---
+
+## Cross-Correlation Engine
+
+Detects infrastructure events where 3+ incident types cluster within 300m:
+
+- Noise + Rodents: **16.7x correlation**
+- Rodents + Housing violations: **13.4x correlation**
+- Potholes + Crashes: **3.2x correlation**
+- Flooding + Rodents: **6.9x correlation**
+
+Draws dashed red boundaries around detected infrastructure failure zones with multi-agency response recommendations.
+
+---
+
+## Impact Radius
+
+Confirmed incidents show affected area rings scaled by category:
+
+| Category | Radius | Reason |
+|---|---|---|
+| Flooding/Sewer/Water | 500m | Water spreads |
+| Air Quality | 400m | Airborne |
+| Rodents | 300m | Colonies spread |
+| Noise | 200m | Sound carries |
+| Street/Tree/Construction | 100m | Localized |
+| Heat | 0 | Building-specific |
+
+---
+
+## NYC Open Data Sources
+
+| Dataset | Endpoint | Purpose |
+|---|---|---|
+| 311 Service Requests | `erm2-nwe9` | All complaint types (noise, sewer, rodent, heat, etc.) |
+| FloodNet Sensors | `kb2e-tjy3` | Sensor locations and metadata |
+| FloodNet Events | `aq7i-eu5q` | Historical flood events with depth/duration |
+| Motor Vehicle Collisions | `h9gi-nx95` | Crash data with injuries/fatalities |
+| DOT Potholes | `x9wy-ing4` | Pothole reports with geometry |
+| Rodent Inspections | `p937-wjvj` | DOH inspection results |
+| Housing Violations | `wvxf-dwi5` | HPD Class C violations |
+| Restaurant Inspections | `43nn-pn8j` | DOHMH critical violations |
+| Construction Permits | `rbx6-tga4` | Active DOB permits |
+| Flood Vulnerability | `mrjc-v9pm` | NYC flood vulnerability index |
+| FEMA Floodplain | `27ya-gqtm` | 2050s projected floodplain GeoJSON |
 
 ### External APIs
+
 | Service | Purpose |
-|---------|---------|
-| NYC DOT Traffic Cameras | 962 live cameras with JPEG snapshots |
-| NWS Weather Alerts | Real-time weather warnings filtered to NYC |
-| Nominatim/OSM | Geocoding addresses to lat/lng |
+|---|---|
+| NYC DOT Traffic Cameras | 962 live cameras (`webcams.nyctmc.org/api/cameras/`) |
+| NWS Weather Alerts | Real-time warnings (`api.weather.gov/alerts/active?area=NY`) |
+| Nominatim/OSM | Address geocoding |
 
-## For Judges
+---
 
-### What Makes This Different
-1. **100% On-Device AI** — Nemotron-Mini runs locally on the GB10 Grace Blackwell chip. No cloud API calls for inference. Privacy-first.
-2. **Multi-Agent Architecture** — Router agent (query planning) + RAG agent (data retrieval from ChromaDB) + Dispatch agent (incident management) + Prediction agent (cross-correlation analytics)
-3. **Real Data, Real Impact** — All data comes from live NYC Open Data APIs. Every marker on the map represents a real report, real sensor reading, or real inspection.
-4. **Multi-Channel Intake** — Citizens can report via phone call, SMS, Discord, or web form. Reports are geocoded, categorized, and triaged automatically.
-5. **Predictive Analytics** — Cross-correlates potholes with crashes (3.2x more crashes near potholes), noise with rodents (16.7x correlation), flooding with sewer complaints. Identifies infrastructure failure zones where 3+ incident types cluster.
+## Hardware
 
-### How to Demo
-1. Open `http://<device-ip>:8080` in a browser
-2. Click **DEMO** for an automated tour of NYC hotspots with narration
-3. Click **Incidents** to see dispatch data with animated markers (music notes for noise, water puddles for flooding, scurrying rats for rodents)
-4. Click **Predict** to see AI-generated danger zones based on cross-correlated data
-5. Click **Cameras** to see live NYC DOT traffic camera feeds
-6. Open the **AI Chat** tab and click **Sitrep** for a status report from Nemotron
-7. Send a Discord message: `flooding at 350 5th Avenue Manhattan` — watch it appear on the map
-8. Click **Heatmap** for a density overlay of all incident types
+| Spec | Value |
+|---|---|
+| Chip | NVIDIA GB10 Grace Blackwell |
+| CPU | ARM Cortex-X925, 20 cores |
+| Memory | 128 GB unified |
+| Storage | 3.7 TB NVMe |
+| AI Model | Nemotron-Mini 4.2B (Q4_K_M quantization) |
+| Inference | ~2-3 seconds per response (on-device, no cloud) |
 
-### Hardware
-- **NVIDIA GB10 Grace Blackwell Superchip** (Acer Veriton GN100)
-- 128 GB unified memory
-- 3.7 TB NVMe storage
-- ARM Cortex-X925 (20 cores)
-- Running Ollama + Nemotron-Mini (4.2B parameters)
-
-### RAG System
-- **ChromaDB** with 6 collections, 1,800 embedded documents
-- Collections: 311 complaints, flood events, collisions, potholes, housing violations, rodent inspections
-- Queries relevant data before each AI chat response
-- No external embedding API — uses ChromaDB's built-in embeddings
+---
 
 ## Team
 
 Colin McDonough
+
+---
 
 ## License
 
