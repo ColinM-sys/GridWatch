@@ -6,6 +6,74 @@ Built for **Spark Hack NYC 2026** (April 10-12, 2026).
 
 ---
 
+## Technical Depth
+
+| Component | What It Does |
+|---|---|
+| **Correlation Analysis** (10 datasets, haversine distance, random baseline comparison) | Real data science — discovers hidden links like rodents + housing violations correlating at 37.8x baseline |
+| **Backtest Predictions** (672k training records, 158k test records, grid-based model) | ML pipeline with validation — 56.6% top-category accuracy, 88.6% best grid cell |
+| **Monitor Agent** (cross-references FloodNet + 311, anomaly detection, auto-incident creation) | Autonomous agent loop — detects 4x spikes per ZIP, creates incidents without human input |
+| **26-Tool NeMo ReAct Agent** | Complex tool orchestration — agent reasons over flood, 311, geo, and CRM tools in a loop |
+| **Pipecat Voice Pipeline** (Whisper STT → Nemotron LLM → Kokoro TTS) | Multi-modal — residents call in, AI answers, creates incidents from speech |
+| **OpenClaw Skills** (4 custom: dispatch-triage, flood-monitor, risk-assessment, nyc-dispatch) | Multi-agent / skill architecture — inbound from any channel via OpenClaw |
+| **Multi-Channel I/O** (Discord bot, Twilio voice, SMS alerts, dashboard chat) | System integration — one platform, every input/output channel |
+## Architecture
+
+```mermaid
+graph TB
+    subgraph Data Sources
+        NYC[NYC Open Data<br/>311 - Crashes - Potholes<br/>Rodents - Housing - Noise]
+        FN[FloodNet Sensors<br/>Real-time depth readings]
+        CIT[Citizen Reports<br/>Discord - Twilio - SMS]
+    end
+
+    subgraph Processing Pipeline
+        ING[Ingest Engine<br/>10 datasets via SODA API]
+        DB[(SQLite + ChromaDB<br/>Incidents - Vectors - Subscriptions)]
+        CORR[Correlation Analysis<br/>10 cross-dataset pairs<br/>Up to 37.8x baseline correlation]
+        BT[Backtest Predictions<br/>672k training records<br/>56.6% top accuracy - 88.6% best grid cell]
+        MON[Monitor Agent<br/>Anomaly detection - 4x spike alerts<br/>Auto-incident creation]
+    end
+
+    subgraph AI Layer
+        OL[Ollama - Nemotron Mini<br/>Local on DGX Spark GB10]
+        RA[NeMo ReAct Agent<br/>26 registered tools]
+        OC[OpenClaw Skills<br/>gridwatch-dispatch-triage<br/>gridwatch-flood-monitor<br/>gridwatch-risk-assessment]
+    end
+
+    subgraph Output Channels
+        DASH[Live Dashboard<br/>Heatmap - Anomaly markers<br/>Predictive ghost pins]
+        DC[Discord Bot<br/>Incident reports - Alerts]
+        TW[Twilio Voice<br/>Pipecat - Whisper STT - Kokoro TTS]
+        SMS[SMS Alerts<br/>Location-based subscriptions]
+    end
+
+    NYC --> ING
+    FN --> ING
+    CIT --> RA
+    ING --> DB
+    DB --> CORR
+    DB --> BT
+    DB --> MON
+    DB --> RA
+    MON --> DB
+    OL --> RA
+    RA --> OC
+    RA --> DASH
+    RA --> DC
+    RA --> TW
+    RA --> SMS
+    BT --> DASH
+    CORR --> DASH
+```
+
+
+## Architecture
+
+
+
+---
+
 ## Stack
 
 | Layer | Technology |
