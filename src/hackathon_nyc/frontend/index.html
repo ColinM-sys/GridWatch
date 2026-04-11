@@ -16,12 +16,12 @@
 
         /* Header */
         .header { grid-column: 1 / -1; background: linear-gradient(180deg, #12121a 0%, #0d0d14 100%); border-bottom: 1px solid #1e1e2a; display: flex; align-items: center; padding: 6px 16px; gap: 12px; flex-wrap: wrap; position: relative; z-index: 100; }
-        .header h1 { font-size: 20px; font-weight: 800; white-space: nowrap; letter-spacing: 1px; background: linear-gradient(135deg, #76b900 0%, #a0e030 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header h1 { font-size: 28px; font-weight: 900; white-space: nowrap; letter-spacing: 2px; background: linear-gradient(135deg, #76b900 0%, #a0e030 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-transform: uppercase; }
         .header .status { font-size: 11px; color: #555; margin-left: auto; white-space: nowrap; }
         .header .status .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #76b900; margin-right: 5px; animation: pulse-dot 2s infinite; box-shadow: 0 0 6px #76b90088; }
 
-        .layer-toggle { display: flex; gap: 4px; flex-wrap: wrap; max-width: 720px; }
-        .layer-btn { padding: 4px 10px; border-radius: 14px; font-size: 10px; cursor: pointer; border: 1px solid #2a2a35; background: #14141e; color: #777; transition: all 0.2s; white-space: nowrap; font-weight: 500; letter-spacing: 0.3px; }
+        .layer-toggle { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; flex: 1; }
+        .layer-btn { padding: 5px 10px; border-radius: 14px; font-size: 10px; cursor: pointer; border: 1px solid #2a2a35; background: #14141e; color: #777; transition: all 0.2s; white-space: nowrap; font-weight: 500; letter-spacing: 0.3px; height: 26px; display: inline-flex; align-items: center; }
         .layer-btn.active { background: #76b900; color: #000; border-color: #76b900; font-weight: 700; box-shadow: 0 0 8px #76b90066; }
         .layer-btn:hover { border-color: #76b900; color: #aaa; background: #1a1a28; }
         .flood-dropdown:hover .flood-dropdown-menu { display: block !important; }
@@ -506,7 +506,7 @@
             background: linear-gradient(135deg, #76b900 0%, #5a9400 100%);
             color: #000; border: none; font-weight: 700;
             text-transform: uppercase; letter-spacing: 1.5px;
-            padding: 5px 16px; border-radius: 14px; font-size: 10px; cursor: pointer;
+            padding: 5px 16px; border-radius: 14px; font-size: 10px; cursor: pointer; height: 26px; display: inline-flex; align-items: center;
             transition: all 0.3s; box-shadow: 0 2px 10px #76b90044;
         }
         #btn-demo:hover {
@@ -556,18 +556,10 @@
         /* === INFRASTRUCTURE EVENT OVERLAY === */
         /* Visual indicator: anything clickable gets a green pulse ring */
         .clickable-marker {
-            border-radius: 50%;
-            box-shadow: 0 0 0 2px #76b90099, 0 0 8px 2px #76b90055;
-            animation: clickable-pulse 2.5s ease-in-out infinite;
             transition: transform 0.15s;
         }
         .clickable-marker:hover {
-            transform: scale(1.25);
-            box-shadow: 0 0 0 3px #76b900ee, 0 0 14px 4px #76b90099;
-        }
-        @keyframes clickable-pulse {
-            0%, 100% { box-shadow: 0 0 0 2px #76b90099, 0 0 8px 2px #76b90055; }
-            50%      { box-shadow: 0 0 0 3px #76b900cc, 0 0 12px 3px #76b90088; }
+            transform: scale(1.2);
         }
         .infra-event-marker {
             width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
@@ -587,11 +579,11 @@
 <body>
     <div class="container">
         <div class="header">
-            <div style="display:flex;align-items:baseline;gap:8px;">
-                <h1>GridWatch</h1>
-                <span style="font-size:9px;color:#444;font-weight:400;letter-spacing:0.5px;">NYC URBAN INTELLIGENCE</span>
+            <div style="display:flex;flex-direction:column;gap:0;">
+                <h1>GRIDWATCH</h1>
+                <span style="font-size:9px;color:#555;font-weight:500;letter-spacing:1.5px;margin-top:-4px;">NYC URBAN INTELLIGENCE</span>
             </div>
-            <div style="width:1px;height:24px;background:#2a2a35;"></div>
+            <div style="width:1px;height:28px;background:#2a2a35;margin:0 4px;"></div>
             <div class="layer-toggle">
                 <button class="layer-btn" onclick="toggleLayer('incidents')">Incidents</button>
                 <div class="flood-dropdown" style="position:relative;display:inline-block">
