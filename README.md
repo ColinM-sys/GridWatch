@@ -283,25 +283,6 @@ Confirmed incidents show affected area rings scaled by category:
 
 ---
 
-## Hardware
-
-| Spec | Value |
-|---|---|
-| Chip | NVIDIA GB10 Grace Blackwell |
-| CPU | ARM Cortex-X925, 20 cores |
-| Memory | 128 GB unified |
-| Storage | 3.7 TB NVMe |
-| AI Model | Nemotron-Mini 4.2B (Q4_K_M quantization) |
-| Inference | ~2-3 seconds per response (on-device, no cloud) |
-
----
-
-## Team
-
-Colin McDonough
-
----
-
 ## License
 
 Built for Spark Hack NYC 2026. All rights reserved.
