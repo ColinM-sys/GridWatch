@@ -1091,6 +1091,108 @@ async def generate_chat(request: Request):
     return {"output": output, "rag_points": rag_points}
 
 
+@app.get("/api/risk/{address:path}")
+async def neighborhood_risk(address: str):
+    """Generate a neighborhood risk score for a given address."""
+    from hackathon_nyc.tools.geocoding import geocode_address
+    from math import radians, sin, cos, asin, sqrt
+
+    def _hav(la1, lo1, la2, lo2):
+        R = 3958.8
+        la1, lo1, la2, lo2 = map(radians, (la1, lo1, la2, lo2))
+        return R * 2 * asin(sqrt(sin((la2-la1)/2)**2 + cos(la1)*cos(la2)*sin((lo2-lo1)/2)**2))
+
+    # Geocode the address
+    geo = await geocode_address(address + ", New York City, NY")
+    if "error" in geo or not geo.get("lat"):
+        return {"error": "Could not geocode address", "address": address}
+
+    clat, clon = float(geo["lat"]), float(geo["lon"])
+    display_addr = geo.get("display_name", address)
+    radius_miles = 0.5
+
+    # Query all RAG collections
+    risk_data = {"flooding": [], "rodent": [], "collision": [], "housing": [], "pothole": [], "noise": []}
+    try:
+        from hackathon_nyc.tools.historical_lookup import historical_lookup as _hl
+        for coll_name, risk_key in [
+            ("nyc_flood_events", "flooding"),
+            ("nyc_rodent_inspections", "rodent"),
+            ("nyc_collisions", "collision"),
+            ("nyc_housing_violations", "housing"),
+            ("nyc_potholes", "pothole"),
+            ("nyc_311_current", "noise"),
+        ]:
+            try:
+                rag = await _hl(f"incidents near {address}", k=20, collections=[coll_name])
+                points = rag.get("points", [])
+                nearby = [p for p in points if _hav(clat, clon, p["lat"], p["lon"]) <= radius_miles]
+                risk_data[risk_key] = nearby
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Also check dispatch DB
+    incidents = db.list_incidents(limit=100)
+    nearby_incidents = [i for i in incidents if i.get("latitude") and i.get("longitude")
+                        and _hav(clat, clon, i["latitude"], i["longitude"]) <= radius_miles]
+
+    # Score each category (0-100)
+    def score_cat(count, thresholds=(2, 5, 10)):
+        if count >= thresholds[2]: return 100
+        if count >= thresholds[1]: return 75
+        if count >= thresholds[0]: return 50
+        if count >= 1: return 25
+        return 0
+
+    scores = {
+        "flooding": score_cat(len(risk_data["flooding"]), (2, 4, 8)),
+        "rodent": score_cat(len(risk_data["rodent"]), (2, 5, 10)),
+        "collision": score_cat(len(risk_data["collision"]), (1, 3, 6)),
+        "housing": score_cat(len(risk_data["housing"]), (2, 5, 10)),
+        "pothole": score_cat(len(risk_data["pothole"]), (2, 4, 8)),
+        "noise": score_cat(len(risk_data["noise"]), (3, 6, 12)),
+    }
+
+    risk_labels = {0: "NONE", 25: "LOW", 50: "MEDIUM", 75: "HIGH", 100: "CRITICAL"}
+    overall = max(1, 100 - int(sum(scores.values()) / len(scores)))
+
+    # Find correlations
+    correlations = []
+    if scores["rodent"] >= 50 and scores["noise"] >= 50:
+        correlations.append("Noise + Rodents (16.7x correlation)")
+    if scores["rodent"] >= 50 and scores["housing"] >= 50:
+        correlations.append("Rodents + Housing violations (13.4x correlation)")
+    if scores["pothole"] >= 50 and scores["collision"] >= 50:
+        correlations.append("Potholes + Crashes (3.2x correlation)")
+    if scores["flooding"] >= 50 and scores["rodent"] >= 50:
+        correlations.append("Flooding + Rodents (6.9x correlation)")
+
+    # Top concern
+    top_key = max(scores, key=scores.get)
+    top_concern = {"flooding": "Flooding/Sewer", "rodent": "Rodent Activity", "collision": "Vehicle Crashes",
+                   "housing": "Housing Violations", "pothole": "Potholes", "noise": "Noise"}[top_key]
+
+    # Build all points for map plotting
+    all_points = []
+    for key, pts in risk_data.items():
+        for p in pts:
+            all_points.append(p)
+
+    return {
+        "address": display_addr,
+        "lat": clat, "lon": clon,
+        "overall_score": overall,
+        "overall_label": "SAFE" if overall >= 80 else "MODERATE RISK" if overall >= 50 else "HIGH RISK" if overall >= 25 else "CRITICAL",
+        "categories": {k: {"score": v, "label": risk_labels.get(v, "?"), "count": len(risk_data.get(k, []))} for k, v in scores.items()},
+        "nearby_dispatch_incidents": len(nearby_incidents),
+        "correlations": correlations,
+        "top_concern": top_concern,
+        "rag_points": all_points,
+    }
+
+
 def _match_incident_id(partial_id: str, incidents: list) -> dict | None:
     """Match a partial incident ID or title against the incident list."""
     partial_id = partial_id.strip().lstrip("#").lower()
