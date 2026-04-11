@@ -537,6 +537,33 @@ async def webhook_report(request: Request):
     # Attach urgency metadata to response
     incident["urgency_score"] = urgency_score
     incident["urgency_label"] = urgency_label
+
+    # Auto-alert nearby subscribers via SMS
+    if lat and lon:
+        try:
+            subscribers = db.find_subscribers_near(lat, lon, category)
+            if subscribers:
+                import os
+                from twilio.rest import Client as TwilioClient
+                sid = os.getenv("TWILIO_ACCOUNT_SID")
+                token = os.getenv("TWILIO_AUTH_TOKEN")
+                from_num = os.getenv("TWILIO_PHONE_NUMBER")
+                if sid and token and from_num:
+                    tw = TwilioClient(sid, token)
+                    for sub in subscribers:
+                        if sub.get("contact_type") == "sms" and sub.get("contact"):
+                            try:
+                                tw.messages.create(
+                                    body=f"⚠️ GRIDWATCH ALERT: {category.upper()} reported near {address[:60]}. {urgency_label} severity. #{incident['id'][:8]}",
+                                    from_=from_num,
+                                    to=sub["contact"],
+                                )
+                                logger.info(f"[Alert] SMS sent to {sub['contact']} for incident #{incident['id'][:8]}")
+                            except Exception as e:
+                                logger.warning(f"[Alert] SMS failed to {sub['contact']}: {e}")
+        except Exception as e:
+            logger.warning(f"[Alert] check failed: {e}")
+
     return incident
 
 

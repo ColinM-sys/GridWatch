@@ -823,6 +823,12 @@
             if (demoRunning) return;
             if (typeof updateDeckLayers === 'function') updateDeckLayers();
         });
+        // Force flat view outside demo to prevent icon distortion
+        map.on('moveend', () => {
+            if (!demoRunning && map.getPitch() > 0) {
+                map.easeTo({ pitch: 0, duration: 200 });
+            }
+        });
         // ==================== 3D BUILDINGS ====================
         map.on('style.load', () => {
             // Add 3D building extrusions
@@ -2820,6 +2826,9 @@
                 layerVisible.incidents = true;
                 loadIncidents();
                 loadRecent311();
+                // Hide floodplain if showing
+                try { if (map.getLayer('floodplain-fill')) map.setLayoutProperty('floodplain-fill', 'visibility', 'none'); } catch(e) {}
+                try { if (map.getLayer('floodplain-line')) map.setLayoutProperty('floodplain-line', 'visibility', 'none'); } catch(e) {}
             } else {
                 btn.classList.remove('active');
                 clearMarkerLayer('recent311');
