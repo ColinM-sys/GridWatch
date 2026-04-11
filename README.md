@@ -175,9 +175,21 @@ Subscribe to alerts for a specific address. When a new incident is created nearb
 
 ## OpenClaw Agent Skills
 
-GridWatch implements three autonomous agent skills following the [OpenClaw SKILL.md format](https://docs.openclaw.ai/tools/skills). Each skill is a self-contained capability that the Nemotron agent can execute independently.
+GridWatch implements four autonomous agent skills registered with [OpenClaw](https://openclaw.ai) (v2026.4.10) on the NVIDIA GB10. All skills are `✓ ready` and visible via `openclaw skills list`. Each follows the [SKILL.md format](https://docs.openclaw.ai/tools/skills).
 
-### Skill 1: Neighborhood Risk Assessment
+### Skill 1: NYC Dispatch (Discord)
+**`skills/nyc-dispatch/`** — `openclaw-managed`
+
+Discord-native dispatch bot that processes citizen reports via emoji reactions.
+
+- Detects incident reports in Discord messages (flooding, noise, rats, etc.)
+- Reacts with 👀 (processing) → ✅ (created) or ❌ (not understood)
+- Auto-creates incidents via the GridWatch API with geocoding
+- Handles alert subscriptions ("alert me at Times Square")
+- Ignores casual chat — only responds to real reports
+- Sends ⚠️ CONFIRMED alerts when incidents reach 3+ reports
+
+### Skill 2: Neighborhood Risk Assessment
 **`skills/gridwatch-risk-assessment/`**
 
 Analyzes infrastructure risk for any NYC address by querying 6 live city data APIs in real-time.
@@ -189,7 +201,7 @@ Analyzes infrastructure risk for any NYC address by querying 6 live city data AP
 - Plots all historical data points on the map
 - **API:** `GET /api/risk/<address>`
 
-### Skill 2: Dispatch Auto-Triage
+### Skill 3: Dispatch Auto-Triage
 **`skills/gridwatch-dispatch-triage/`**
 
 Automatically processes incoming citizen reports from any channel and triages them for dispatch.
@@ -202,7 +214,7 @@ Automatically processes incoming citizen reports from any channel and triages th
 - Auto-alerts nearby SMS subscribers via Twilio
 - Works across all intake channels: phone, SMS, Discord, web form
 
-### Skill 3: Flood Risk Monitor
+### Skill 4: Flood Risk Monitor
 **`skills/gridwatch-flood-monitor/`**
 
 Monitors NYC flood conditions using FloodNet sensors, 311 data, and weather alerts.
