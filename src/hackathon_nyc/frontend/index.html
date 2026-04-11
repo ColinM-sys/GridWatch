@@ -885,25 +885,25 @@
                 'star-intensity': 0.3
             });
 
-            // Add 3D terrain
-            map.addSource('mapbox-dem', {
-                type: 'raster-dem',
-                url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-                tileSize: 512,
-                maxzoom: 14
-            });
-            map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
-
-            // Add sky layer for realism
-            map.addLayer({
-                id: 'sky',
-                type: 'sky',
-                paint: {
-                    'sky-type': 'atmosphere',
-                    'sky-atmosphere-sun': [0.0, 0.0],
+            // Add 3D terrain + sky (skip on weak GPUs / Safari)
+            try {
+                map.addSource('mapbox-dem', {
+                    type: 'raster-dem',
+                    url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+                    tileSize: 512,
+                    maxzoom: 14
+                });
+                map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+                map.addLayer({
+                    id: 'sky',
+                    type: 'sky',
+                    paint: {
+                        'sky-type': 'atmosphere',
+                        'sky-atmosphere-sun': [0.0, 0.0],
                     'sky-atmosphere-sun-intensity': 5
                 }
             });
+            } catch(e) { console.warn('3D terrain/sky not supported on this GPU:', e.message); }
         });
 
         // ==================== BUILDING COLORING BY INCIDENT TYPE ====================
