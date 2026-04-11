@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  gridwatch:
+    build: .
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    environment:
+      - PYTHONPATH=src
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER:-}
+      - DISCORD_TOKEN=${DISCORD_TOKEN:-}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - ollama
+    restart: unless-stopped
+    command: >
+      sh -c "
+        cd /app/src/hackathon_nyc/frontend && python3 -m http.server 8080 --bind 0.0.0.0 &
+        cd /app && PYTHONPATH=src python3 -m uvicorn hackathon_nyc.server:app --host 0.0.0.0 --port 8000
+      "
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  discord-bot:
+    build: .
+    environment:
+      - PYTHONPATH=src
+      - DISCORD_TOKEN=${DISCORD_TOKEN:-}
+    depends_on:
+      - gridwatch
+    restart: unless-stopped
+    command: PYTHONPATH=src python3 -m hackathon_nyc.discord_bot
+
+volumes:
+  ollama-data:

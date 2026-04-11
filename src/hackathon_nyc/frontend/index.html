@@ -637,12 +637,26 @@
                 <div class="map-legend-row" style="margin-top:4px;border-top:1px solid #333;padding-top:4px"><div class="map-legend-color" style="background:#76b900;border-radius:50%"></div>FloodNet Sensor</div>
                 <div class="map-legend-row"><div class="map-legend-color" style="border:1px dashed #666;background:transparent"></div>Unconfirmed</div>
             </div>
-            <div class="qr-overlay">
-                <div class="qr-title">Report an Incident</div>
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://discord.com/oauth2/authorize?client_id=1480806290551996547%26scope=bot%26permissions=274877975552" alt="Add Bot">
-                <div class="qr-label">Scan to add Discord bot</div>
-                <div class="qr-phone">&#x1F4DE; +1 917 993 7245</div>
-                <div class="qr-label">Call or text to report</div>
+            <div class="qr-overlay" id="qr-panel" style="padding:8px 12px;width:auto;cursor:pointer" onclick="document.getElementById('qr-content').style.display=document.getElementById('qr-content').style.display==='none'?'block':'none'">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="font-size:14px">📱</span>
+                    <span class="qr-title" style="margin:0">Report an Incident</span>
+                    <span style="font-size:10px;color:#555;margin-left:auto" id="qr-toggle">▼</span>
+                </div>
+                <div id="qr-content" style="display:none;margin-top:8px" onclick="event.stopPropagation()">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                        <div style="text-align:center">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://nonexhausted-nonaquatic-yareli.ngrok-free.dev/report" alt="Photo Report" style="width:80px;height:80px;border-radius:4px">
+                            <div class="qr-label" style="margin-top:3px;font-size:8px">📷 Photo Report</div>
+                        </div>
+                        <div style="text-align:center">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://discord.com/oauth2/authorize?client_id=1480806290551996547%26scope=bot%26permissions=274877975552" alt="Add Bot" style="width:80px;height:80px;border-radius:4px">
+                            <div class="qr-label" style="margin-top:3px;font-size:8px">💬 Discord Bot</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:6px;font-size:11px;color:#fff;font-family:monospace">📞 +1 917 993 7245</div>
+                    <div class="qr-label" style="font-size:8px">Call to report</div>
+                </div>
             </div>
         </div>
 
@@ -810,11 +824,11 @@
 
         const map = new mapboxgl.Map({
             container: 'map',
-            style: 'mapbox://styles/mapbox/dark-v11',
+            style: 'mapbox://styles/mapbox/standard',
             center: [-73.95, 40.75],
             zoom: 11,
-            pitch: 0,
-            bearing: 0,
+            pitch: 45,
+            bearing: -17,
             antialias: true,
             renderWorldCopies: false,
             minZoom: 9
@@ -827,9 +841,8 @@
             if (demoRunning) return;
             if (typeof updateDeckLayers === 'function') updateDeckLayers();
         });
-        // Disable right-click drag rotation/pitch to prevent icon drift
-        map.dragRotate.disable();
-        map.touchZoomRotate.disableRotation();
+        // Preload NYC building tiles
+        map.on('load', () => { map.triggerRepaint(); });
         // ==================== 3D BUILDINGS ====================
         map.on('style.load', () => {
             // Add 3D building extrusions
@@ -840,11 +853,27 @@
                 type: 'fill-extrusion',
                 minzoom: 12,
                 paint: {
-                    'fill-extrusion-color': '#1a1a2e',
+                    'fill-extrusion-color': [
+                        'interpolate', ['linear'], ['get', 'height'],
+                        0, '#1a1a2e',
+                        50, '#222238',
+                        100, '#2a2a44',
+                        200, '#333355',
+                        400, '#3d3d66'
+                    ],
                     'fill-extrusion-height': ['get', 'height'],
                     'fill-extrusion-base': ['get', 'min_height'],
-                    'fill-extrusion-opacity': 0.7
+                    'fill-extrusion-opacity': 0.85,
+                    'fill-extrusion-ambient-occlusion-intensity': 0.3,
+                    'fill-extrusion-ambient-occlusion-radius': 3
                 }
+            });
+            // Add directional light for realistic shadows
+            map.setLight({
+                anchor: 'viewport',
+                color: '#ffffff',
+                intensity: 0.4,
+                position: [1.5, 210, 30]
             });
 
             // Add atmosphere/fog for depth
@@ -854,6 +883,26 @@
                 'horizon-blend': 0.05,
                 'space-color': '#050510',
                 'star-intensity': 0.3
+            });
+
+            // Add 3D terrain
+            map.addSource('mapbox-dem', {
+                type: 'raster-dem',
+                url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+                tileSize: 512,
+                maxzoom: 14
+            });
+            map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+
+            // Add sky layer for realism
+            map.addLayer({
+                id: 'sky',
+                type: 'sky',
+                paint: {
+                    'sky-type': 'atmosphere',
+                    'sky-atmosphere-sun': [0.0, 0.0],
+                    'sky-atmosphere-sun-intensity': 5
+                }
             });
         });
 
@@ -1478,6 +1527,8 @@
             street_condition: { emoji: '\u{1F6A7}', color: '#ffaa00', fill: '#cc8800' },
             water:            { emoji: '\u{1F4A7}', color: '#44aaff', fill: '#2288cc' },
             tree:             { emoji: '\u{1F333}', color: '#44bb44', fill: '#228822' },
+            health:           { emoji: '🏥', color: '#ff3366', fill: '#cc2255' },
+            fire:             { emoji: '🔥', color: '#ff2200', fill: '#cc1100' },
             other:            { emoji: '\u26A0\uFE0F', color: '#888888', fill: '#666666' },
         };
 

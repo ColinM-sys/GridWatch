@@ -9,10 +9,10 @@ Run: uvicorn hackathon_nyc.server:app --reload --port 8000
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from pathlib import Path
 
@@ -861,7 +861,10 @@ async def generate_chat(request: Request):
                     "pothole", "violation", "complaint", "near ", "hotspot",
                     "worst", "dangerous", "most", "where are", "which area",
                     "concentration", "cluster", "problem area"]
-    if any(t in user_input.lower() for t in rag_triggers):
+    # Skip RAG for sitrep/status/dispatch queries — those use DB stats only
+    rag_skip = ["sitrep", "status", "report", "give me a", "how many", "resolve", "assign", "update", "create", "delete"]
+    skip_rag = any(s in user_input.lower() for s in rag_skip)
+    if not skip_rag and any(t in user_input.lower() for t in rag_triggers):
         try:
             from hackathon_nyc.tools.historical_lookup import historical_lookup as _hl
             # Pick collections by topic words in the query
@@ -922,10 +925,13 @@ async def generate_chat(request: Request):
                 logger.warning("[RAG geo-filter] %s", _ge)
                 geo_note = ""
             if chunks:
-                rag_context = "\n\nHISTORICAL DATA FROM NYC OPEN DATA (use this to answer):\n"
-                for c in chunks[:8]:
-                    rag_context += f"[{c['collection']}] {c['text'][:250]}\n"
-                rag_context += f"\nMANDATORY RULES (the user asked a historical question and we found {len(chunks)} matching records):\n1. START your reply with 'Yes' — records exist, you MUST acknowledge them. NEVER say 'no records found' or 'there are no records'.\n2. State the count: '{len(chunks)} records were found'.\n3. Summarize in 2-4 plain English sentences what they contain (top categories, boroughs, dates).\n4. NEVER paste raw JSON, coordinates, geometry, or field names like 'the_geom', 'defnum', 'violationid'.\n5. NEVER contradict the data above by claiming nothing was found."
+                # Build a pre-formatted summary so the model doesn't dump raw data
+                collection_counts = {}
+                for c in chunks:
+                    coll = c.get('collection', 'unknown').replace('nyc_', '').replace('_', ' ').title()
+                    collection_counts[coll] = collection_counts.get(coll, 0) + 1
+                summary_parts = ", ".join(f"{v} {k}" for k, v in sorted(collection_counts.items(), key=lambda x: -x[1]))
+                rag_context = f"\n\nDATA FOUND: {len(chunks)} records ({summary_parts}). Summarize this for the dispatcher in plain English. Do NOT paste field names, JSON, or raw data. Just say what was found, where, and what it means."
         except Exception as _e:
             logger.warning("[RAG] historical_lookup failed: %s", _e)
 
@@ -1079,6 +1085,17 @@ async def generate_chat(request: Request):
         output = f"{clean_response}\n\n**→ {action_result}**" if clean_response else f"**→ {action_result}**"
     else:
         output = clean_response or ai_response
+
+    # If model dumped raw field names, replace with clean summary
+    raw_indicators = ['sensor_id:', 'inspection_type:', 'job_ticket', 'bbl:', 'boro_code:', 'on_street_name:', 'crash_date:', 'violation', 'defnum', 'the_geom', 'number_of_persons']
+    if any(ind in output for ind in raw_indicators) and rag_points:
+        # Model failed to summarize — generate server-side summary
+        collection_counts = {}
+        for p in rag_points:
+            coll = p.get('collection', 'unknown').replace('nyc_', '').replace('_', ' ').title()
+            collection_counts[coll] = collection_counts.get(coll, 0) + 1
+        summary = f"Found {len(rag_points)} records: " + ", ".join(f"{v} {k.lower()}" for k, v in sorted(collection_counts.items(), key=lambda x: -x[1]))
+        output = summary
 
     # Save to history
     CHAT_HISTORY.append({"role": "user", "content": user_input})
@@ -1246,6 +1263,325 @@ def _match_incident_id(partial_id: str, incidents: list) -> dict | None:
         if partial_id in inc.get("title", "").lower():
             return inc
     return None
+
+
+# ---------------------------------------------------------------------------
+# Photo Incident Reporting (Mobile)
+# ---------------------------------------------------------------------------
+
+UPLOAD_DIR = Path(__file__).parent.parent.parent / "data" / "uploads"
+
+REPORT_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GridWatch - Report Incident</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a12;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+.header{background:linear-gradient(135deg,#111118,#16161f);padding:16px 20px;border-bottom:1px solid #2a2a35;text-align:center}
+.header h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,#00d4ff,#7b2fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header p{font-size:12px;color:#666;margin-top:4px}
+.container{flex:1;padding:20px;max-width:480px;margin:0 auto;width:100%}
+.photo-area{border:2px dashed #2a2a35;border-radius:12px;padding:40px 20px;text-align:center;margin-bottom:16px;cursor:pointer;transition:all 0.3s;position:relative;overflow:hidden;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.photo-area:hover,.photo-area.dragover{border-color:#00d4ff;background:#0d0d1a}
+.photo-area.has-photo{padding:0;border-style:solid;border-color:#2a2a35}
+.photo-area img{max-width:100%;max-height:300px;border-radius:10px;display:block}
+.photo-icon{font-size:48px;margin-bottom:12px}
+.photo-text{font-size:14px;color:#888}
+.photo-sub{font-size:11px;color:#555;margin-top:6px}
+input[type="file"]{display:none}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:600;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
+.field textarea{width:100%;background:#111118;border:1px solid #2a2a35;border-radius:8px;padding:12px;color:#e0e0e0;font-size:14px;resize:vertical;min-height:80px;font-family:inherit}
+.field textarea:focus{outline:none;border-color:#00d4ff}
+.gps-status{font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.gps-status.detecting{background:#1a1a2e;color:#00d4ff;border:1px solid #00d4ff33}
+.gps-status.found{background:#0a2a0a;color:#00ff88;border:1px solid #00ff8833}
+.gps-status.failed{background:#2a0a0a;color:#ff4444;border:1px solid #ff444433}
+.gps-dot{width:8px;height:8px;border-radius:50%;animation:pulse 1.5s infinite}
+.gps-status.detecting .gps-dot{background:#00d4ff}
+.gps-status.found .gps-dot{background:#00ff88;animation:none}
+.gps-status.failed .gps-dot{background:#ff4444;animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.submit-btn{width:100%;padding:14px;background:linear-gradient(135deg,#00d4ff,#7b2fff);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;transition:all 0.3s;text-transform:uppercase;letter-spacing:1px}
+.submit-btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px #00d4ff44}
+.submit-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none;box-shadow:none}
+.submit-btn.submitting{background:linear-gradient(135deg,#333,#444)}
+.result{margin-top:20px;padding:20px;border-radius:12px;display:none}
+.result.success{display:block;background:#0a2a0a;border:1px solid #00ff8833}
+.result.error{display:block;background:#2a0a0a;border:1px solid #ff444433}
+.result h3{font-size:16px;margin-bottom:12px}
+.result.success h3{color:#00ff88}
+.result.error h3{color:#ff4444}
+.result-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #ffffff11;font-size:13px}
+.result-row .label{color:#888}
+.result-row .value{color:#e0e0e0;font-weight:500}
+.result-ai{margin-top:12px;padding:12px;background:#111118;border-radius:8px;font-size:13px;color:#ccc;line-height:1.5}
+.result-ai .ai-label{font-size:10px;color:#7b2fff;font-weight:700;text-transform:uppercase;margin-bottom:4px}
+.back-btn{display:inline-block;margin-top:16px;padding:10px 20px;background:#1a1a2e;color:#00d4ff;border:1px solid #00d4ff33;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>GRIDWATCH</h1>
+<p>NYC Urban Intelligence - Photo Report</p>
+</div>
+<div class="container">
+<div class="photo-area" id="photoArea" onclick="document.getElementById('photoInput').click()">
+<div class="photo-icon">&#x1F4F7;</div>
+<div class="photo-text">Tap to take a photo or upload</div>
+<div class="photo-sub">Supports camera capture &amp; gallery</div>
+</div>
+<input type="file" id="photoInput" accept="image/*" capture="environment">
+<div class="gps-status detecting" id="gpsStatus">
+<div class="gps-dot"></div>
+<span>Detecting your location...</span>
+</div>
+<div class="field">
+<label>Description (optional)</label>
+<textarea id="description" placeholder="What's the issue? e.g. 'Flooded street, water is knee-deep'"></textarea>
+</div>
+<button class="submit-btn" id="submitBtn" onclick="submitReport()">Submit Report</button>
+<div class="result" id="result"></div>
+</div>
+<script>
+let lat=null,lng=null,photoFile=null;
+// GPS
+if(navigator.geolocation){
+navigator.geolocation.getCurrentPosition(
+p=>{lat=p.coords.latitude;lng=p.coords.longitude;
+document.getElementById('gpsStatus').className='gps-status found';
+document.getElementById('gpsStatus').innerHTML='<div class="gps-dot"></div><span>Location found: '+lat.toFixed(5)+', '+lng.toFixed(5)+'</span>'},
+e=>{document.getElementById('gpsStatus').className='gps-status failed';
+document.getElementById('gpsStatus').innerHTML='<div class="gps-dot"></div><span>GPS unavailable - will try photo EXIF</span>'},
+{enableHighAccuracy:true,timeout:15000}
+)}
+// Photo
+document.getElementById('photoInput').addEventListener('change',function(e){
+if(e.target.files&&e.target.files[0]){
+photoFile=e.target.files[0];
+const reader=new FileReader();
+reader.onload=function(ev){
+const area=document.getElementById('photoArea');
+area.innerHTML='<img src="'+ev.target.result+'" alt="Photo">';
+area.classList.add('has-photo')};
+reader.readAsDataURL(photoFile)}});
+// Submit
+async function submitReport(){
+if(!photoFile){alert('Please take or upload a photo first');return}
+const btn=document.getElementById('submitBtn');
+btn.disabled=true;btn.textContent='Analyzing...';btn.classList.add('submitting');
+const fd=new FormData();
+fd.append('photo',photoFile);
+fd.append('description',document.getElementById('description').value);
+if(lat)fd.append('latitude',lat);
+if(lng)fd.append('longitude',lng);
+try{
+const resp=await fetch('/api/report/photo',{method:'POST',body:fd});
+const data=await resp.json();
+if(resp.ok){
+const r=document.getElementById('result');
+r.className='result success';
+r.innerHTML='<h3>Incident Reported!</h3>'+
+'<div class="result-row"><span class="label">ID</span><span class="value">#'+data.id.substring(0,8)+'</span></div>'+
+'<div class="result-row"><span class="label">Category</span><span class="value">'+data.category+'</span></div>'+
+'<div class="result-row"><span class="label">Severity</span><span class="value">'+data.severity+'</span></div>'+
+'<div class="result-row"><span class="label">Location</span><span class="value">'+(data.latitude?data.latitude.toFixed(4)+', '+data.longitude.toFixed(4):'N/A')+'</span></div>'+
+(data.ai_analysis?'<div class="result-ai"><div class="ai-label">AI Analysis (Llama Vision)</div>'+data.ai_analysis+'</div>':'')+
+'<a href="/" class="back-btn">View on Map &rarr;</a>'}
+else{const r=document.getElementById('result');r.className='result error';r.innerHTML='<h3>Error</h3><p>'+(data.detail||'Submission failed')+'</p>'}
+}catch(e){const r=document.getElementById('result');r.className='result error';r.innerHTML='<h3>Network Error</h3><p>'+e.message+'</p>'}
+btn.disabled=false;btn.textContent='Submit Report';btn.classList.remove('submitting')}
+</script>
+</body>
+</html>"""
+
+
+@app.get("/report", response_class=HTMLResponse)
+def report_page():
+    """Serve the mobile photo reporting page."""
+    return HTMLResponse(content=REPORT_HTML)
+
+
+@app.post("/api/report/photo")
+async def report_photo(
+    photo: UploadFile = File(...),
+    description: str = Form(""),
+    latitude: float = Form(None),
+    longitude: float = Form(None),
+):
+    """Accept a photo-based incident report.
+
+    - Extracts EXIF GPS if browser GPS unavailable
+    - Uses Ollama llama3.2-vision:11b to analyze the photo
+    - Creates an incident with detected category + AI description
+    """
+    import uuid, os, base64
+
+    # Ensure upload dir exists
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Save photo
+    photo_bytes = await photo.read()
+    ext = Path(photo.filename or "photo.jpg").suffix or ".jpg"
+    photo_id = uuid.uuid4().hex[:12]
+    photo_path = UPLOAD_DIR / f"{photo_id}{ext}"
+    photo_path.write_bytes(photo_bytes)
+    logger.info(f"[PhotoReport] Saved photo: {photo_path} ({len(photo_bytes)} bytes)")
+
+    # Extract EXIF GPS if no browser GPS
+    exif_lat, exif_lon = None, None
+    if not latitude or not longitude:
+        try:
+            from PIL import Image
+            from PIL.ExifTags import TAGS, GPSTAGS
+            import io
+
+            img = Image.open(io.BytesIO(photo_bytes))
+            exif_data = img._getexif()
+            if exif_data:
+                gps_info = {}
+                for tag_id, value in exif_data.items():
+                    tag = TAGS.get(tag_id, tag_id)
+                    if tag == "GPSInfo":
+                        for gps_tag_id, gps_value in value.items():
+                            gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
+                            gps_info[gps_tag] = gps_value
+
+                if "GPSLatitude" in gps_info and "GPSLongitude" in gps_info:
+                    def dms_to_decimal(dms, ref):
+                        d, m, s = [float(x) for x in dms]
+                        decimal = d + m / 60 + s / 3600
+                        if ref in ("S", "W"):
+                            decimal = -decimal
+                        return decimal
+
+                    exif_lat = dms_to_decimal(
+                        gps_info["GPSLatitude"],
+                        gps_info.get("GPSLatitudeRef", "N")
+                    )
+                    exif_lon = dms_to_decimal(
+                        gps_info["GPSLongitude"],
+                        gps_info.get("GPSLongitudeRef", "W")
+                    )
+                    logger.info(f"[PhotoReport] EXIF GPS: {exif_lat}, {exif_lon}")
+        except Exception as e:
+            logger.warning(f"[PhotoReport] EXIF extraction failed: {e}")
+
+    final_lat = latitude or exif_lat
+    final_lon = longitude or exif_lon
+
+    # Analyze photo with Ollama llama3.2-vision:11b
+    ai_analysis = ""
+    ai_category = "other"
+    ai_severity = "medium"
+    try:
+        import aiohttp
+        photo_b64 = base64.b64encode(photo_bytes).decode("utf-8")
+
+        prompt = (
+            "You are an NYC urban incident analyst. Analyze this photo and respond with EXACTLY this format:\\n"
+            "CATEGORY: <one of: flooding, fire, pothole, rodent, sewer, noise, street_condition, tree, water, health, other>\\n"
+            "SEVERITY: <one of: low, medium, high, critical>\\n"
+            "DESCRIPTION: <1-2 sentence description of what you see and the issue>\\n\\n"
+            "Be specific about the urban issue visible in the photo."
+        )
+
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                "model": "llama3.2-vision:11b",
+                "prompt": prompt,
+                "images": [photo_b64],
+                "stream": False,
+            }
+            async with session.post(
+                "http://localhost:11434/api/generate",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=120),
+            ) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    ai_text = result.get("response", "")
+                    ai_analysis = ai_text
+                    logger.info(f"[PhotoReport] AI analysis: {ai_text[:200]}")
+
+                    # Parse category
+                    for line in ai_text.split("\n"):
+                        line_lower = line.strip().lower()
+                        if line_lower.startswith("category:"):
+                            cat = line_lower.split(":", 1)[1].strip()
+                            valid_cats = ["flooding", "fire", "pothole", "rodent", "sewer",
+                                          "noise", "street_condition", "tree", "water", "other"]
+                            for vc in valid_cats:
+                                if vc in cat:
+                                    ai_category = vc
+                                    break
+                        elif line_lower.startswith("severity:"):
+                            sev = line_lower.split(":", 1)[1].strip()
+                            for vs in ["low", "medium", "high", "critical"]:
+                                if vs in sev:
+                                    ai_severity = vs
+                                    break
+                        elif line_lower.startswith("description:"):
+                            ai_analysis = line.split(":", 1)[1].strip()
+                else:
+                    logger.warning(f"[PhotoReport] Ollama returned {resp.status}")
+    except Exception as e:
+        logger.error(f"[PhotoReport] Vision analysis failed: {e}")
+        ai_analysis = f"Photo uploaded (AI analysis unavailable: {e})"
+
+    # Override category based on user description keywords
+    desc_lower = (description or "").lower()
+    if any(w in desc_lower for w in ["sick", "unwell", "unconscious", "medical", "health", "hurt", "injured", "fallen", "collapsed", "overdose", "homeless"]):
+        ai_category = "health"
+    elif any(w in desc_lower for w in ["fire", "smoke", "burning"]):
+        ai_category = "fire"
+
+    # Use description from user if AI analysis is empty
+    final_description = description or ai_analysis or "Photo report"
+    if description and ai_analysis:
+        final_description = f"{description}\n\nAI Analysis: {ai_analysis}"
+
+    # Create the incident
+    incident = db.create_incident(
+        title=f"Photo Report: {ai_category.replace('_', ' ').title()}"[:60],
+        category=ai_category,
+        description=final_description,
+        severity=ai_severity,
+        source="citizen_photo",
+        latitude=final_lat,
+        longitude=final_lon,
+    )
+    incident["ai_analysis"] = ai_analysis
+    incident["photo_path"] = str(photo_path)
+
+    # Auto-alert nearby subscribers
+    if final_lat and final_lon:
+        try:
+            subscribers = db.find_subscribers_near(final_lat, final_lon, ai_category)
+            if subscribers:
+                import os
+                from twilio.rest import Client as TwilioClient
+                sid = os.getenv("TWILIO_ACCOUNT_SID")
+                token = os.getenv("TWILIO_AUTH_TOKEN")
+                from_num = os.getenv("TWILIO_PHONE_NUMBER")
+                if sid and token and from_num:
+                    tw = TwilioClient(sid, token)
+                    for sub in subscribers:
+                        if sub.get("contact_type") == "sms" and sub.get("contact"):
+                            try:
+                                tw.messages.create(
+                                    body=f"📸 GRIDWATCH: {ai_category.upper()} reported via photo near your area. #{incident['id'][:8]}",
+                                    from_=from_num, to=sub["contact"],
+                                )
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+
+    return incident
 
 
 # ---------------------------------------------------------------------------
