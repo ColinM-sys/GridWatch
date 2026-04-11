@@ -1,0 +1,67 @@
+============================================================
+      PREDICTION BACKTEST RESULTS
+============================================================
+
+Training period: Jan 1 - Feb 28, 2026 (672,823 complaints)
+Testing period:  Mar 1 - Mar 15, 2026 (158,465 complaints)
+Grid cell size:  0.005 lat x 0.005 lng (~500m x 400m)
+Pattern threshold: >= 2 occurrences in training
+
+------------------------------------------------------------
+OVERALL METRICS
+------------------------------------------------------------
+  Total predictions generated: 106,881
+  Predictions that matched (hits): 41,409
+  Predictions that missed: 65,472
+  Overall hit rate: 38.7%
+  False positive rate: 61.3%
+  Test incidents not predicted: 97,466 / 130,751 unique combos
+
+------------------------------------------------------------
+HIT RATE BY COMPLAINT TYPE
+------------------------------------------------------------
+
+  Top 10 most predictable complaint types:
+    Illegal Parking: 56.6% (9593/16950 predictions hit) strongest
+    HEAT/HOT WATER: 56.6% (17249/30482 predictions hit) 
+    Vendor Enforcement: 56.4% (176/312 predictions hit) 
+    Noise - Residential: 56.0% (5482/9790 predictions hit) 
+    Unsanitary Pigeon Condition: 53.3% (8/15 predictions hit) 
+    Noise - Street/Sidewalk: 47.0% (529/1125 predictions hit) 
+    Noise - Commercial: 44.4% (532/1197 predictions hit) 
+    Taxi Complaint: 40.5% (83/205 predictions hit) 
+    Encampment: 40.4% (451/1116 predictions hit) 
+    Homeless Person Assistance: 38.8% (128/330 predictions hit) 
+
+  Bottom 5 (least predictable):
+    BEST/Site Safety: 0.0% (0/1)
+    Pet Sale: 0.0% (0/1)
+    Mold: 0.0% (0/1)
+    Investigations and Discipline (IAD): 0.0% (0/1)
+    Tattooing: 0.0% (0/1)
+
+------------------------------------------------------------
+TOP 10 MOST PREDICTABLE LOCATIONS
+------------------------------------------------------------
+
+    [40.6900, -73.7950]: 88.6% hit rate (164/185 predictions)
+    [40.8550, -73.9250]: 87.5% hit rate (7/8 predictions)
+    [40.5800, -73.9750]: 85.7% hit rate (6/7 predictions)
+    [40.8600, -73.9350]: 83.3% hit rate (10/12 predictions)
+    [40.7950, -73.9600]: 80.4% hit rate (82/102 predictions)
+    [40.8350, -73.9400]: 76.9% hit rate (100/130 predictions)
+    [40.8400, -73.9200]: 76.1% hit rate (86/113 predictions)
+    [40.8300, -73.9500]: 75.0% hit rate (111/148 predictions)
+    [40.6050, -74.0000]: 74.7% hit rate (186/249 predictions)
+    [40.8250, -73.9550]: 74.4% hit rate (96/129 predictions)
+
+------------------------------------------------------------
+KEY INSIGHTS
+------------------------------------------------------------
+
+  1. 'Illegal Parking' is the most predictable complaint type at 56.6% hit rate.
+  2. 5 complaint types have >50% predictability from historical patterns.
+  3. 20 grid cells show >70% prediction accuracy (hotspots).
+  4. The model generated 106,881 actionable predictions for a 15-day test window.
+
+============================================================

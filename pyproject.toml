@@ -1,0 +1,29 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=64", "setuptools-scm>=8", "setuptools_dynamic_dependencies>=1.0.0"]
+
+[tool.setuptools_scm]
+git_describe_command = "git describe --long --first-parent"
+root = "../.."
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project]
+name = "hackathon_nyc"
+dynamic = ["version", "dependencies"]
+requires-python = ">=3.11,<3.14"
+description = "NYC Hackathon - FloodWatch AI & 311 Command Center (Spark Hack NYC April 2026)"
+keywords = ["ai", "rag", "agents", "nyc", "floodwatch", "311"]
+classifiers = ["Programming Language :: Python"]
+
+[tool.setuptools_dynamic_dependencies]
+dependencies = [
+  "nvidia-nat[langchain,test] == {version}",
+]
+
+[tool.uv.sources]
+nvidia-nat = { path = "../..", editable = true }
+
+[project.entry-points.'nat.components']
+hackathon_nyc = "hackathon_nyc.register"

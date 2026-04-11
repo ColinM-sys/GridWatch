@@ -1,0 +1,3 @@
+data/incidents.db
+__pycache__/
+*.pyc

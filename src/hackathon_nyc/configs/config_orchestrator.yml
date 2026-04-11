@@ -1,0 +1,106 @@
+# NYC Hackathon - Parallel Agent Orchestrator
+# Master agent with TRUE parallel execution via asyncio.gather
+# When a question spans both domains, both agents run concurrently
+
+llms:
+  orchestrator_llm:
+    _type: openai
+    model_name: nemotron-mini
+    base_url: http://localhost:11434/v1
+    api_key: ollama
+    temperature: 0.1
+    max_tokens: 2048
+  specialist_llm:
+    _type: openai
+    model_name: nemotron-mini
+    base_url: http://localhost:11434/v1
+    api_key: ollama
+    temperature: 0.0
+    max_tokens: 2048
+
+function_groups:
+  flood_tools:
+    _type: nyc_flood_tools
+  complaint_tools:
+    _type: nyc_311_tools
+  geo_tools:
+    _type: nyc_geo_tools
+
+functions:
+  # --- Specialist Agent: FloodWatch ---
+  floodwatch_agent:
+    _type: tool_calling_agent
+    tool_names: [flood_tools, geo_tools]
+    llm_name: specialist_llm
+    verbose: true
+    handle_tool_errors: true
+    description: >
+      FloodWatch environmental monitoring agent. Use this for questions ONLY about
+      flooding, flood sensors, flood risk, water depth, air quality, environmental
+      data, or climate resilience in NYC.
+
+  # --- Specialist Agent: 311 Command Center ---
+  command_center_agent:
+    _type: tool_calling_agent
+    tool_names: [complaint_tools, geo_tools]
+    llm_name: specialist_llm
+    verbose: true
+    handle_tool_errors: true
+    description: >
+      NYC 311 Command Center agent. Use this for questions ONLY about 311 service
+      requests, complaints, noise, rodents, heat/hot water, sewer issues, or
+      resident-reported problems.
+
+  # --- Parallel Executor: Both Agents at Once ---
+  both_agents:
+    _type: parallel_agent_query
+    agent_1: floodwatch_agent
+    agent_2: command_center_agent
+    description: >
+      Query BOTH FloodWatch and 311 Command Center agents simultaneously using
+      parallel execution. Use this when a question involves BOTH environmental
+      data AND complaint data, or when you want a comprehensive cross-domain
+      analysis. Both agents run concurrently via asyncio.gather for faster results.
+
+  # --- Shared Tools ---
+  current_datetime:
+    _type: current_datetime
+
+# --- Master Orchestrator ---
+workflow:
+  _type: react_agent
+  tool_names: [floodwatch_agent, command_center_agent, both_agents, current_datetime]
+  llm_name: orchestrator_llm
+  verbose: true
+  parse_agent_response_max_retries: 3
+  system_prompt: |
+    You are the NYC Urban Intelligence System, a master orchestrator that coordinates
+    two specialist AI agents to provide comprehensive city monitoring and analysis.
+
+    You have THREE routing options:
+    1. **floodwatch_agent** - ONLY environmental: flooding, sensors, air quality, climate risk
+    2. **command_center_agent** - ONLY 311 service requests: complaints, noise, rodents, heat, sewer
+    3. **both_agents** - PARALLEL EXECUTION of both agents simultaneously. Use this when:
+       - A question involves BOTH environmental AND complaint data
+       - You want a comprehensive cross-domain analysis
+       - The user asks about a neighborhood/area holistically
+       - Example: "What's happening in Brooklyn?" or "How does flooding correlate with complaints?"
+
+    PREFER using both_agents for cross-domain questions — it runs both agents in parallel
+    which is faster than calling them one at a time.
+
+    Available tools:
+    {tools}
+
+    Use the following format:
+
+    Question: the input question you must answer
+    Thought: reason about what to do and which agent(s) to call
+    Action: the action to take, should be one of [{tool_names}]
+    Action Input: the input to the action
+    Observation: the result of the action
+
+    ... (this Thought/Action/Action Input/Observation can repeat N times.)
+
+    Thought: I now know the final answer
+    Final Answer: the final answer to the original input question

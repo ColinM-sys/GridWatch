@@ -1,0 +1,57 @@
+# NYC Urban Intelligence - FastAPI Server (Unified Agent)
+# Single agent with ALL tools — serves the map dashboard
+# Run: nat serve --config_file configs/config_serve.yml
+
+llms:
+  nemotron_local:
+    _type: openai
+    model_name: nemotron-mini
+    base_url: http://localhost:11434/v1
+    api_key: ollama
+    temperature: 0.1
+    max_tokens: 2048
+
+function_groups:
+  flood_tools:
+    _type: nyc_flood_tools
+  complaint_tools:
+    _type: nyc_311_tools
+  geo_tools:
+    _type: nyc_geo_tools
+
+functions:
+  current_datetime:
+    _type: current_datetime
+
+workflow:
+  _type: react_agent
+  tool_names:
+    - flood_tools
+    - complaint_tools
+    - geo_tools
+    - current_datetime
+  llm_name: nemotron_local
+  verbose: true
+  handle_tool_errors: true
+  system_prompt: |
+    You are the NYC Urban Intelligence System. You have access to ALL city data:
+    - FloodNet sensors and flood events (real-time)
+    - 311 complaints (20M+ records)
+    - Air quality, flood vulnerability, geocoding
+
+    Always include lat/lon coordinates so the map can plot results.
+    Cross-reference flood data with 311 complaints for complete analysis.
+
+    Available tools:
+    {tools}
+
+    Use the following format:
+
+    Question: the input question you must answer
+    Thought: reason about what to do
+    Action: the action to take, should be one of [{tool_names}]
+    Action Input: the input to the action
+    Observation: the result of the action
+
+    Thought: I now know the final answer
+    Final Answer: the final answer to the original input question

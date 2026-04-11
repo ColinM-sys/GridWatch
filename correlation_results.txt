@@ -1,0 +1,136 @@
+======================================================================
+       NYC INCIDENT CORRELATION ANALYSIS
+======================================================================
+
+----------------------------------------------------------------------
+[!!] STRONG CORRELATIONS (ratio > 2.0x)
+----------------------------------------------------------------------
+
+  Noise (Residential) <-> Rodent Activity: 16.7x correlation
+    Data: 2000 Noise (Residential) points, 1993 Rodent Activity points
+    Avg Rodent Activity within 0.25 km of Noise (Residential): 1.90
+    Avg Rodent Activity within 0.25 km of random point: 0.11
+    By distance:
+      0.1 km: actual=0.38, random=0.01, ratio=37.8x
+      0.25 km: actual=1.90, random=0.11, ratio=16.7x
+      0.5 km: actual=7.00, random=0.59, ratio=11.8x
+      1.0 km: actual=25.13, random=2.86, ratio=8.8x
+    -> FINDING: Noise complaint hotspots overlap with rodent activity — may indicate building maintenance issues.
+
+  Rodent Activity <-> Housing Violations (Class C): 13.4x correlation
+    Data: 1993 Rodent Activity points, 2000 Housing Violations (Class C) points
+    Avg Housing Violations (Class C) within 0.25 km of Rodent Activity: 2.57
+    Avg Housing Violations (Class C) within 0.25 km of random point: 0.19
+    By distance:
+      0.1 km: actual=0.48, random=0.01, ratio=39.7x
+      0.25 km: actual=2.57, random=0.19, ratio=13.4x
+      0.5 km: actual=8.91, random=0.85, ratio=10.4x
+      1.0 km: actual=28.97, random=3.56, ratio=8.1x
+    -> FINDING: Rat activity clusters near buildings with serious housing violations — coordinated inspections recommended.
+
+  Noise (Residential) <-> Housing Violations (Class C): 11.2x correlation
+    Data: 2000 Noise (Residential) points, 2000 Housing Violations (Class C) points
+    Avg Housing Violations (Class C) within 0.25 km of Noise (Residential): 2.14
+    Avg Housing Violations (Class C) within 0.25 km of random point: 0.19
+    By distance:
+      0.1 km: actual=0.41, random=0.01, ratio=34.2x
+      0.25 km: actual=2.14, random=0.19, ratio=11.2x
+      0.5 km: actual=6.80, random=0.85, ratio=8.0x
+      1.0 km: actual=27.13, random=3.56, ratio=7.6x
+    -> FINDING: Noise complaints cluster near Class C housing violations — both signal distressed buildings.
+
+  Vehicle Crashes <-> Rodent Activity: 9.3x correlation
+    Data: 1950 Vehicle Crashes points, 1993 Rodent Activity points
+    Avg Rodent Activity within 0.25 km of Vehicle Crashes: 1.06
+    Avg Rodent Activity within 0.25 km of random point: 0.11
+    By distance:
+      0.1 km: actual=0.17, random=0.01, ratio=17.2x
+      0.25 km: actual=1.06, random=0.11, ratio=9.3x
+      0.5 km: actual=4.56, random=0.59, ratio=7.7x
+      1.0 km: actual=18.14, random=2.86, ratio=6.3x
+    -> FINDING: Crashes and rodent sightings cluster in the same neighborhoods — dense urban corridors.
+
+  Sewer/Flooding <-> Rodent Activity: 6.9x correlation
+    Data: 2000 Sewer/Flooding points, 1993 Rodent Activity points
+    Avg Rodent Activity within 0.25 km of Sewer/Flooding: 0.79
+    Avg Rodent Activity within 0.25 km of random point: 0.11
+    By distance:
+      0.1 km: actual=0.13, random=0.01, ratio=13.2x
+      0.25 km: actual=0.79, random=0.11, ratio=6.9x
+      0.5 km: actual=3.15, random=0.59, ratio=5.3x
+      1.0 km: actual=11.34, random=2.86, ratio=4.0x
+    -> FINDING: Sewer issues attract rodent activity — fixing drainage may reduce pest problems.
+
+  Vehicle Crashes <-> Noise (Residential): 6.1x correlation
+    Data: 1950 Vehicle Crashes points, 2000 Noise (Residential) points
+    Avg Noise (Residential) within 0.25 km of Vehicle Crashes: 1.23
+    Avg Noise (Residential) within 0.25 km of random point: 0.20
+    By distance:
+      0.1 km: actual=0.23, random=0.04, ratio=6.1x
+      0.25 km: actual=1.23, random=0.20, ratio=6.1x
+      0.5 km: actual=4.16, random=0.72, ratio=5.8x
+      1.0 km: actual=13.62, random=3.28, ratio=4.1x
+    -> FINDING: Crash-prone areas generate noise complaints — likely high-traffic, high-density zones.
+
+  Potholes <-> Sewer/Flooding: 3.7x correlation
+    Data: 2000 Potholes points, 2000 Sewer/Flooding points
+    Avg Sewer/Flooding within 0.25 km of Potholes: 0.65
+    Avg Sewer/Flooding within 0.25 km of random point: 0.18
+    By distance:
+      0.1 km: actual=0.17, random=0.04, ratio=4.7x
+      0.25 km: actual=0.65, random=0.18, ratio=3.7x
+      0.5 km: actual=2.64, random=0.74, ratio=3.6x
+      1.0 km: actual=9.93, random=2.76, ratio=3.6x
+    -> FINDING: Potholes and sewer issues co-occur — shared root cause of aging infrastructure.
+
+  Sewer/Flooding <-> Housing Violations (Class C): 3.5x correlation
+    Data: 2000 Sewer/Flooding points, 2000 Housing Violations (Class C) points
+    Avg Housing Violations (Class C) within 0.25 km of Sewer/Flooding: 0.67
+    Avg Housing Violations (Class C) within 0.25 km of random point: 0.19
+    By distance:
+      0.1 km: actual=0.09, random=0.01, ratio=7.2x
+      0.25 km: actual=0.67, random=0.19, ratio=3.5x
+      0.5 km: actual=2.71, random=0.85, ratio=3.2x
+      1.0 km: actual=10.52, random=3.56, ratio=3.0x
+    -> FINDING: Sewer/flooding reports near housing violations suggest infrastructure-linked building deterioration.
+
+  Potholes <-> Vehicle Crashes: 3.2x correlation
+    Data: 2000 Potholes points, 1950 Vehicle Crashes points
+    Avg Vehicle Crashes within 0.25 km of Potholes: 0.66
+    Avg Vehicle Crashes within 0.25 km of random point: 0.21
+    By distance:
+      0.1 km: actual=0.15, random=0.04, ratio=3.5x
+      0.25 km: actual=0.66, random=0.21, ratio=3.2x
+      0.5 km: actual=2.51, random=0.79, ratio=3.2x
+      1.0 km: actual=9.22, random=2.89, ratio=3.2x
+    -> FINDING: Areas with pothole clusters should be flagged for traffic safety — crashes concentrate near road damage.
+
+  Potholes <-> Noise (Residential): 2.4x correlation
+    Data: 2000 Potholes points, 2000 Noise (Residential) points
+    Avg Noise (Residential) within 0.25 km of Potholes: 0.49
+    Avg Noise (Residential) within 0.25 km of random point: 0.20
+    By distance:
+      0.1 km: actual=0.07, random=0.04, ratio=1.9x
+      0.25 km: actual=0.49, random=0.20, ratio=2.4x
+      0.5 km: actual=2.18, random=0.72, ratio=3.0x
+      1.0 km: actual=9.69, random=3.28, ratio=3.0x
+    -> FINDING: Pothole-heavy areas also generate noise complaints — possible construction or traffic congestion link.
+
+======================================================================
+  KEY INSIGHTS FOR DISPATCHERS
+======================================================================
+
+  1. Noise complaint hotspots overlap with rodent activity — may indicate building maintenance issues.
+  2. Rat activity clusters near buildings with serious housing violations — coordinated inspections recommended.
+  3. Noise complaints cluster near Class C housing violations — both signal distressed buildings.
+  4. Crashes and rodent sightings cluster in the same neighborhoods — dense urban corridors.
+  5. Sewer issues attract rodent activity — fixing drainage may reduce pest problems.
+  6. Crash-prone areas generate noise complaints — likely high-traffic, high-density zones.
+  7. Potholes and sewer issues co-occur — shared root cause of aging infrastructure.
+  8. Sewer/flooding reports near housing violations suggest infrastructure-linked building deterioration.
+  9. Areas with pothole clusters should be flagged for traffic safety — crashes concentrate near road damage.
+  10. Pothole-heavy areas also generate noise complaints — possible construction or traffic congestion link.
+
+======================================================================
+  Analysis complete. 10 pairs evaluated.
+======================================================================
