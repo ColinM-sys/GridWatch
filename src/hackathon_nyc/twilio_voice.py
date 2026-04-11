@@ -201,8 +201,12 @@ def register_twilio_routes(app):
             lat, lon, address = None, None, ""
             try:
                 import re
-                # Don't strip location-relevant words, just prepend NYC context
-                for query in [body + ', Manhattan, New York City', body + ', New York City, NY']:
+                # Strip incident keywords but keep location words
+                cleaned = re.sub(r'\b(report|flooding|flood|noise|loud|rats?|rodent|sewer|pothole|water|fire|gas leak|tree down|blocking|crash|accident|broken|there is|there are|i see|help|please|emergency)\b', ' ', body, flags=re.IGNORECASE)
+                cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+                if not cleaned or len(cleaned) < 3:
+                    cleaned = body
+                for query in [cleaned + ', Manhattan, New York City', cleaned + ', New York City, NY', body + ', New York City, NY']:
                     geo = await geocoding.geocode_address(query)
                     if "error" not in geo:
                         lat, lon = geo["lat"], geo["lon"]
@@ -211,9 +215,23 @@ def register_twilio_routes(app):
             except Exception:
                 pass
 
+            # Detect category from keywords
+            msg_lower = body.lower()
+            category = "other"
+            for kw, cat in [("flood", "flooding"), ("water main", "flooding"), ("sewer", "sewer"),
+                            ("gas leak", "sewer"), ("noise", "noise"), ("loud", "noise"),
+                            ("rat", "rodent"), ("mouse", "rodent"), ("roach", "rodent"),
+                            ("heat", "heat"), ("hot water", "heat"), ("no heat", "heat"),
+                            ("pothole", "street_condition"), ("crash", "street_condition"),
+                            ("tree", "tree"), ("branch", "tree"), ("water", "water"),
+                            ("hydrant", "water"), ("leak", "water"), ("fire", "other")]:
+                if kw in msg_lower:
+                    category = cat
+                    break
+
             incident = db.create_incident(
                 title=f"SMS report: {body[:60]}",
-                category="other",
+                category=category,
                 description=f"SMS from {sender}: {body}",
                 source="citizen_sms",
                 latitude=lat,

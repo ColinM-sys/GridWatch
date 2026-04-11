@@ -625,7 +625,7 @@ async def websocket_endpoint(websocket: WebSocket):
     # STT
     try:
         from pipecat.services.whisper.stt import WhisperSTTService
-        stt = WhisperSTTService(model_size="medium")
+        stt = WhisperSTTService(model_size="tiny.en")
     except ImportError:
         from pipecat.services.deepgram.stt import DeepgramSTTService
         import os
@@ -648,7 +648,7 @@ async def websocket_endpoint(websocket: WebSocket):
     # LLM — Nemotron via Ollama
     llm = OLLamaLLMService(
         settings=OLLamaLLMService.Settings(
-            model="nemotron-3-nano",
+            model="nemotron-mini",
             system_instruction=SYSTEM_PROMPT,
         ),
     )
