@@ -131,16 +131,27 @@ Open `http://DEVICE_IP:8080` from any browser on your network.
 
 ---
 
-### Environment Variables
+### API Keys & Credentials
+
+| Key | Required? | Where to get it | Where to set it |
+|-----|-----------|----------------|-----------------|
+| **Mapbox Token** | Yes (map won't load without it) | [account.mapbox.com/access-tokens](https://account.mapbox.com/access-tokens/) — free signup | Replace `YOUR_MAPBOX_TOKEN_HERE` in `src/hackathon_nyc/frontend/index.html` line 808 |
+| **Discord Bot Token** | Optional (for Discord intake) | [discord.com/developers/applications](https://discord.com/developers/applications) — create app → Bot → copy token | `export DISCORD_TOKEN=your_token` |
+| **Twilio Account SID** | Optional (for phone/SMS) | [console.twilio.com](https://console.twilio.com) — free trial gives $15 credit | `export TWILIO_ACCOUNT_SID=your_sid` |
+| **Twilio Auth Token** | Optional (for phone/SMS) | Same Twilio console → Account → Auth Token | `export TWILIO_AUTH_TOKEN=your_token` |
+| **Twilio Phone Number** | Optional (for phone/SMS) | Twilio console → Phone Numbers → Buy a Number | `export TWILIO_PHONE_NUMBER=+1234567890` |
+| **Ollama + Nemotron** | Yes (AI chat) | `ollama pull nemotron-mini` — no API key, runs locally | Auto-detected on localhost:11434 |
+| **ngrok** | Optional (for Twilio webhooks) | [ngrok.com](https://ngrok.com) — free signup | `ngrok http 8000` then set Twilio webhooks to ngrok URL |
+
+> **Minimum to run:** Just Mapbox token + Ollama. Everything else is optional — the map, dispatch, AI chat, cameras, and heatmap all work without Discord/Twilio/ngrok.
 
 ```bash
+# Set environment variables (optional — only needed for Discord/Twilio features)
 export DISCORD_TOKEN=your_discord_bot_token
 export TWILIO_ACCOUNT_SID=your_twilio_sid
 export TWILIO_AUTH_TOKEN=your_twilio_auth_token
 export TWILIO_PHONE_NUMBER=+1234567890
 ```
-
-Set your Mapbox token in `src/hackathon_nyc/frontend/index.html` (line 808). Get a free token at [account.mapbox.com/access-tokens](https://account.mapbox.com/access-tokens/) — sign up, create a token, replace `YOUR_MAPBOX_TOKEN_HERE`.
 
 ---
 
