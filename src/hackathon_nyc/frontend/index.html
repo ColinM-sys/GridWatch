@@ -2416,7 +2416,11 @@
             window.speechSynthesis.speak(utter);
         }
 
+        let riskRunning = false;
         async function riskReport() {
+            if (riskRunning) return;
+            riskRunning = true;
+            try {
             const address = prompt('Enter an address for risk assessment:', '200 Broadway Manhattan');
             if (!address) return;
             const chatDiv = document.getElementById('chatMessages');
@@ -2466,6 +2470,7 @@
                 chatDiv.innerHTML += `<div class="msg agent"><div class="label">GridWatch AI</div>Risk analysis failed. Server may be busy.</div>`;
             }
             chatDiv.scrollTop = chatDiv.scrollHeight;
+            } finally { riskRunning = false; }
         }
 
         function quickChat(text) {

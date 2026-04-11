@@ -135,7 +135,7 @@ Open `http://DEVICE_IP:8080` from any browser on your network.
 
 | Key | Required? | Where to get it | Where to set it |
 |-----|-----------|----------------|-----------------|
-| **Mapbox Token** | Yes (map won't load without it) | [account.mapbox.com/access-tokens](https://account.mapbox.com/access-tokens/) — free signup | Replace `YOUR_MAPBOX_TOKEN_HERE` in `src/hackathon_nyc/frontend/index.html` line 808 |
+| **Mapbox Token** | Yes (map won't load without it) | [account.mapbox.com/access-tokens](https://account.mapbox.com/access-tokens/) — free signup, or use test token: `pk.eyJ1IjoiY21jZG9ub3VnaCIsImEiOiJjbW5odmJkZTcwNnV1MnJwdTR2MDdueXJjIn0.L0lqIAX0mDNyHYO_gBo7Bw` | Replace `YOUR_MAPBOX_TOKEN_HERE` in `src/hackathon_nyc/frontend/index.html` line 808 |
 | **Discord Bot Token** | Optional (for Discord intake) | [discord.com/developers/applications](https://discord.com/developers/applications) — create app → Bot → copy token | `export DISCORD_TOKEN=your_token` |
 | **Twilio Account SID** | Optional (for phone/SMS) | [console.twilio.com](https://console.twilio.com) — free trial gives $15 credit | `export TWILIO_ACCOUNT_SID=your_sid` |
 | **Twilio Auth Token** | Optional (for phone/SMS) | Same Twilio console → Account → Auth Token | `export TWILIO_AUTH_TOKEN=your_token` |

@@ -944,7 +944,8 @@ async def generate_chat(request: Request):
     # Call Ollama
     try:
         async with _aiohttp.ClientSession() as session:
-            ollama_host = os.getenv("OLLAMA_HOST", "localhost:11435")
+            import os as _os2
+            ollama_host = _os2.getenv("OLLAMA_HOST", "localhost:11435")
             async with session.post(f"http://{ollama_host}/api/chat", json={
                 "model": "nemotron-mini",
                 "messages": messages,
@@ -1194,21 +1195,21 @@ async def neighborhood_risk(address: str):
     nearby_incidents = [i for i in incidents if i.get("latitude") and i.get("longitude")
                         and _hav(clat, clon, i["latitude"], i["longitude"]) <= radius_miles]
 
-    # Score each category (0-100)
-    def score_cat(count, thresholds=(2, 5, 10)):
-        if count >= thresholds[2]: return 100
-        if count >= thresholds[1]: return 75
-        if count >= thresholds[0]: return 50
-        if count >= 1: return 25
-        return 0
+    # Score each category — scaled for NYC density (800m radius captures a lot)
+    def score_cat(count, thresholds):
+        if count >= thresholds[3]: return 100  # CRITICAL
+        if count >= thresholds[2]: return 75   # HIGH
+        if count >= thresholds[1]: return 50   # MEDIUM
+        if count >= thresholds[0]: return 25   # LOW
+        return 0                               # NONE
 
     scores = {
-        "flooding": score_cat(len(risk_data["flooding"]), (2, 4, 8)),
-        "rodent": score_cat(len(risk_data["rodent"]), (2, 5, 10)),
-        "collision": score_cat(len(risk_data["collision"]), (1, 3, 6)),
-        "housing": score_cat(len(risk_data["housing"]), (2, 5, 10)),
-        "pothole": score_cat(len(risk_data["pothole"]), (2, 4, 8)),
-        "noise": score_cat(len(risk_data["noise"]), (3, 6, 12)),
+        "flooding": score_cat(len(risk_data["flooding"]), (5, 15, 30, 45)),
+        "rodent": score_cat(len(risk_data["rodent"]), (5, 15, 30, 45)),
+        "collision": score_cat(len(risk_data["collision"]), (3, 10, 25, 40)),
+        "housing": score_cat(len(risk_data["housing"]), (3, 10, 25, 40)),
+        "pothole": score_cat(len(risk_data["pothole"]), (5, 15, 30, 45)),
+        "noise": score_cat(len(risk_data["noise"]), (10, 25, 40, 50)),
     }
 
     risk_labels = {0: "NONE", 25: "LOW", 50: "MEDIUM", 75: "HIGH", 100: "CRITICAL"}
@@ -1498,7 +1499,7 @@ async def report_photo(
                 "stream": False,
             }
             async with session.post(
-                f"http://{os.getenv('OLLAMA_HOST', 'localhost')}:11434/api/generate",
+                f"http://{__import__('os').getenv('OLLAMA_HOST', 'localhost')}:11434/api/generate",
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=120),
             ) as resp:
