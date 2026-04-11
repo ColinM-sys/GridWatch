@@ -140,7 +140,7 @@ export TWILIO_AUTH_TOKEN=your_twilio_auth_token
 export TWILIO_PHONE_NUMBER=+1234567890
 ```
 
-Set your Mapbox token in `src/hackathon_nyc/frontend/index.html` (line 808).
+Set your Mapbox token in `src/hackathon_nyc/frontend/index.html` (line 808). Get a free token at [account.mapbox.com/access-tokens](https://account.mapbox.com/access-tokens/) — sign up, create a token, replace `YOUR_MAPBOX_TOKEN_HERE`.
 
 ---
 
