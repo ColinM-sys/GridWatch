@@ -1134,23 +1134,27 @@
                 .setLngLat(lngLat);
 
             if (popupHtml) {
-                const popup = new mapboxgl.Popup({ offset: 15, maxWidth: '320px' })
+                const popup = new mapboxgl.Popup({ offset: 15, maxWidth: '320px', closeOnClick: true })
                     .setHTML(popupHtml);
                 marker.setPopup(popup);
-                // Close any other open popup when this one opens
-                el.addEventListener('click', () => {
-                    if (window._activePopup && window._activePopup !== popup) {
-                        window._activePopup.remove();
-                    }
-                    window._activePopup = popup;
-                });
                 marker._popupHtmlAccum = popupHtml;
-                // Force-open popup on click — bypass any stacking issues
                 el.addEventListener('click', (ev) => {
                     ev.stopPropagation();
                     ev.preventDefault();
-                    if (!popup.isOpen()) popup.addTo(map);
-                }, true);
+                    // Close any other open popup
+                    if (window._activePopup && window._activePopup !== popup && window._activePopup.isOpen()) {
+                        window._activePopup.remove();
+                    }
+                    // Toggle this popup
+                    if (popup.isOpen()) {
+                        popup.remove();
+                        window._activePopup = null;
+                    } else {
+                        marker.togglePopup();
+                        window._activePopup = popup;
+                    }
+                });
+                el.addEventListener('dblclick', (ev) => { ev.stopPropagation(); ev.preventDefault(); });
             }
 
             if (layerVisible[layerName] !== false) {
@@ -1210,7 +1214,7 @@
                 });
                 document.querySelectorAll('.mapboxgl-marker').forEach(m => {
                     m.style.pointerEvents = 'auto';
-                    m.style.zIndex = '50';
+                    m.style.zIndex = '2';
                 });
             }, 1000);
         }
@@ -1272,16 +1276,7 @@
                             'circle-opacity': 0.15
                         }
                     });
-                    map.on('click', 'heatmap-dots', (e) => {
-                        const f = e.features[0];
-                        if (!f) return;
-                        new mapboxgl.Popup({ offset: 8, maxWidth: '260px' })
-                            .setLngLat(f.geometry.coordinates)
-                            .setHTML(`<b>Heatmap data point</b><br>Lat: ${f.geometry.coordinates[1].toFixed(5)}<br>Lng: ${f.geometry.coordinates[0].toFixed(5)}<br>Weight: ${f.properties.weight}`)
-                            .addTo(map);
-                    });
-                    map.on('mouseenter', 'heatmap-dots', () => map.getCanvas().style.cursor = 'pointer');
-                    map.on('mouseleave', 'heatmap-dots', () => map.getCanvas().style.cursor = '');
+                    // Heatmap dots are visual only — no click popup
                 }
                 map.setLayoutProperty('heatmap-dots', 'visibility', 'visible');
             } else {
@@ -3036,11 +3031,11 @@
                 const online = cameras.filter(c => c.isOnline === 'true' && c.isOnline !== 'false' && c.latitude && c.longitude);
                 // Pre-check which cameras actually serve images by testing a few
                 // Remove any that return errors
-                // Grid-based dedup to avoid stacking — keep 1 camera per ~0.003 degree cell (~300m)
+                // Grid-based dedup to avoid stacking — keep 1 camera per ~0.005 degree cell (~500m)
                 const grid = {};
                 const filtered = [];
                 online.forEach(c => {
-                    const key = `${(c.latitude / 0.003).toFixed(0)},${(c.longitude / 0.003).toFixed(0)}`;
+                    const key = `${(c.latitude / 0.005).toFixed(0)},${(c.longitude / 0.005).toFixed(0)}`;
                     if (!grid[key]) {
                         grid[key] = true;
                         filtered.push(c);
@@ -3063,13 +3058,39 @@
                             <div style="color:#aaa;margin-bottom:4px;font-size:10px;">${c.area || 'NYC'}</div>
                             <div style="position:relative;">
                                 <img id="camimg-${camId}" src="${c.imageUrl}?t=${Date.now()}" style="width:100%;max-width:250px;border-radius:4px;border:1px solid #333;" onerror="this.closest('.mapboxgl-popup')?.remove();this.closest('.mapboxgl-marker')?.remove();" />
-                                <div style="position:absolute;top:4px;right:4px;background:#ff0000;color:#fff;font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;">● LIVE</div>
+                                <div style="position:absolute;top:4px;right:4px;background:#ff0000;color:#fff;font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;animation:marker-pulse 1.5s infinite;">● LIVE</div>
                             </div>
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-                                <span id="camtime-${camId}" style="font-size:9px;color:#666;">Fetched: ${new Date().toLocaleTimeString()}</span>
-                                <button onclick="var img=document.getElementById('camimg-${camId}');img.src='${c.imageUrl}?t='+Date.now();document.getElementById('camtime-${camId}').textContent='Fetched: '+new Date().toLocaleTimeString();" style="font-size:9px;padding:2px 8px;background:#00ccff22;border:1px solid #00ccff;color:#00ccff;border-radius:3px;cursor:pointer;">Refresh</button>
+                                <span id="camtime-${camId}" style="font-size:9px;color:#666;">Auto-refreshing</span>
+                                <button onclick="var img=this.closest('.mapboxgl-popup-content').querySelector('img');if(img){img.src='${c.imageUrl}?t='+Date.now();}document.getElementById('camtime-${camId}').textContent=new Date().toLocaleTimeString();" style="font-size:9px;padding:2px 8px;background:#00ccff22;border:1px solid #00ccff;color:#00ccff;border-radius:3px;cursor:pointer;">Refresh</button>
+                                    <a href="${c.imageUrl}" target="_blank" style="font-size:9px;padding:2px 8px;background:#76b90022;border:1px solid #76b900;color:#76b900;border-radius:3px;cursor:pointer;text-decoration:none;">Full View</a>
                             </div>
                         </div>`);
+                    // Auto-refresh camera image every 3s when popup is open
+                    camPopup.on('open', () => {
+                        const ivKey = '_camInterval_' + camId;
+                        // Clear any existing interval first
+                        if (window[ivKey]) { clearInterval(window[ivKey]); }
+                        let failCount = 0;
+                        window[ivKey] = setInterval(() => {
+                            const img = document.getElementById('camimg-' + camId);
+                            if (!img || failCount > 2) {
+                                clearInterval(window[ivKey]);
+                                window[ivKey] = null;
+                                return;
+                            }
+                            const newImg = new Image();
+                            newImg.onload = () => { img.src = newImg.src; failCount = 0; };
+                            newImg.onerror = () => { failCount++; };
+                            newImg.src = '${c.imageUrl}?t=' + Date.now();
+                            const ts = document.getElementById('camtime-' + camId);
+                            if (ts) ts.textContent = new Date().toLocaleTimeString();
+                        }, 3000);
+                    });
+                    camPopup.on('close', () => {
+                        const ivKey = '_camInterval_' + camId;
+                        if (window[ivKey]) { clearInterval(window[ivKey]); window[ivKey] = null; }
+                    });
                     camMarker.setPopup(camPopup);
                     camMarker.addTo(map);
                     camEl.addEventListener('click', (e) => {
@@ -3421,7 +3442,12 @@
             })).sort((a, b) => b.count - a.count).slice(0, 10);
 
             // Turn on all layers for full visual effect
-            const demoLayers = ['incidents','floods','rodents','collisions','potholes','housing'];
+            // Uncheck flood sub-layers before demo so sensors/floodplain don't show
+            ['toggle-sensors', 'toggle-311floods', 'toggle-floodplain'].forEach(id => {
+                const cb = document.getElementById(id);
+                if (cb) cb.checked = false;
+            });
+            const demoLayers = ['incidents','rodents','collisions','potholes','housing'];
             for (const name of demoLayers) {
                 if (!layerLoaded[name] && layerLoaders[name]) {
                     layerLoaded[name] = true;
@@ -3432,18 +3458,20 @@
                 const btn = document.querySelector(`.layer-btn[onclick*="'${name}'"]`);
                 if (btn) btn.classList.add('active');
             }
-            // Also turn on heatmap
+            // Turn on heatmap with reduced opacity so markers are visible
             heatmapActive = true;
             const heatBtn = document.querySelector('.layer-btn[onclick*="heatmap"]');
             if (heatBtn) heatBtn.classList.add('active');
             layerVisible.heatmap = true;
             await rebuildHeatmap();
+            // Dim the heatmap so markers show through
+            try { if (map.getLayer('heatmap-layer')) map.setPaintProperty('heatmap-layer', 'heatmap-opacity', 0.35); } catch(e) {}
 
             if (!demoRunning) return;
 
             // Start tour
             const bearings = [-17, 45, -45, 90, 0, 135, -90, 30, -60, 180];
-            const pitches = [60, 65, 55, 70, 50, 62, 58, 68, 52, 60];
+            const pitches = [30, 35, 25, 30, 20, 35, 25, 30, 20, 30];
 
             // Tour stops: hotspots + specific feature showcases
             const showcases = [
@@ -3575,9 +3603,26 @@
             const heatBtn2 = document.querySelector('.layer-btn[onclick*="heatmap"]');
             if (heatBtn2) heatBtn2.classList.remove('active');
             updateDeckLayers();
-            if (map.getLayer('incident-glow')) map.removeLayer('incident-glow');
-            if (map.getSource('incident-glow-src')) map.removeSource('incident-glow-src');
-            map.setPaintProperty('3d-buildings', 'fill-extrusion-opacity', 0.7);
+            try { if (map.getLayer('incident-glow')) map.removeLayer('incident-glow'); } catch(e) {}
+            try { if (map.getSource('incident-glow-src')) map.removeSource('incident-glow-src'); } catch(e) {}
+            try { map.setPaintProperty('3d-buildings', 'fill-extrusion-opacity', 0.7); } catch(e) {}
+            // Close all open popups
+            document.querySelectorAll('.mapboxgl-popup').forEach(p => p.remove());
+            window._activePopup = null;
+            // Remove any remaining dynamic GeoJSON layers
+            map.getStyle().layers.forEach(l => {
+                if (l.id.match(/^(incident-|flood-|flood311-|impact-ring-|infra-event-|heatmap)/)) {
+                    try { map.removeLayer(l.id); } catch(e) {}
+                }
+            });
+            // Reset building colors
+            buildingColorData.flooding = [];
+            buildingColorData.noise = [];
+            buildingColorData.heat = [];
+            buildingColorData.rodent = [];
+            buildingColorData.housing = [];
+            buildingColorData.other = [];
+            updateBuildingColors();
             // Reset map view
             map.flyTo({ center: [-73.95, 40.75], zoom: 11, pitch: 45, bearing: -17, duration: 1500 });
         }

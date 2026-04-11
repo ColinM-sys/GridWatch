@@ -868,13 +868,20 @@ async def generate_chat(request: Request):
                             la1, lo1, la2, lo2 = map(radians, (la1, lo1, la2, lo2))
                             d = 2 * asin(sqrt(sin((la2-la1)/2)**2 + cos(la1)*cos(la2)*sin((lo2-lo1)/2)**2))
                             return R * d
-                        radius_miles = 2.0
+                        radius_miles = 5.0
                         filtered = [p for p in rag_points if _hav(clat, clon, p["lat"], p["lon"]) <= radius_miles]
                         if filtered:
                             rag_points = filtered
-                            rag_context += f"\n\nGEO FILTER APPLIED: only {len(filtered)} of the records above are actually within {radius_miles} miles of '{place}'. OVERRIDE the count in the rules above and report exactly {len(filtered)} records found near {place}. Mention the place by name."
+                            geo_note = f"\nGEO FILTER: showing {len(filtered)} records within {radius_miles} miles of {place}."
+                        else:
+                            geo_note = ""
+                    else:
+                        geo_note = ""
+                else:
+                    geo_note = ""
             except Exception as _ge:
                 logger.warning("[RAG geo-filter] %s", _ge)
+                geo_note = ""
             if chunks:
                 rag_context = "\n\nHISTORICAL DATA FROM NYC OPEN DATA (use this to answer):\n"
                 for c in chunks[:8]:
@@ -892,7 +899,7 @@ async def generate_chat(request: Request):
     # Call Ollama
     try:
         async with _aiohttp.ClientSession() as session:
-            async with session.post("http://localhost:11434/api/chat", json={
+            async with session.post("http://localhost:11435/api/chat", json={
                 "model": "nemotron-mini",
                 "messages": messages,
                 "stream": False,
@@ -902,8 +909,35 @@ async def generate_chat(request: Request):
     except Exception as e:
         return {"output": f"LLM error: {e}"}
 
-    # Parse and execute action blocks
+    # If model dumped raw JSON/stats, format it nicely
     import re
+    if '"by_status"' in ai_response or '"total"' in ai_response or '```yaml' in ai_response or '```json' in ai_response:
+        cleaned = re.sub(r'```(?:yaml|json)?\s*\n?', '', ai_response).strip()
+        json_start = cleaned.find('{')
+        if json_start >= 0:
+            cleaned = cleaned[json_start:]
+            json_end = cleaned.rfind('}') + 1
+            if json_end > 0:
+                cleaned = cleaned[:json_end]
+        try:
+            data = _json.loads(cleaned) if cleaned.startswith('{') else None
+            if data and 'total' in data:
+                lines = [f"SITREP - {data.get('total', 0)} total incidents:"]
+                lines.append(f"Open: {data.get('open', 0)} | In Progress: {data.get('in_progress', 0)} | Resolved: {data.get('resolved', 0)}")
+                if 'by_category' in data:
+                    cats = ', '.join(f"{k}: {v}" for k, v in sorted(data['by_category'].items(), key=lambda x: -x[1]))
+                    lines.append(f"By type: {cats}")
+                if 'by_severity' in data:
+                    sevs = ', '.join(f"{k}: {v}" for k, v in data['by_severity'].items())
+                    lines.append(f"Severity: {sevs}")
+                if 'by_borough' in data:
+                    boros = ', '.join(f"{k}: {v}" for k, v in data['by_borough'].items())
+                    lines.append(f"Boroughs: {boros}")
+                ai_response = '\n'.join(lines)
+        except (_json.JSONDecodeError, TypeError):
+            pass
+
+    # Parse and execute action blocks
     action_match = re.search(r'```action\s*\n(.*?)\n```', ai_response, re.DOTALL)
     action_result = None
 
@@ -1052,7 +1086,8 @@ async def get_cameras():
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get("https://webcams.nyctmc.org/api/cameras/", timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                return await resp.json()
+                cameras = await resp.json()
+        return [c for c in cameras if c.get("isOnline") == "true" and c.get("latitude") and c.get("longitude")]
     except Exception as e:
         return []
 
