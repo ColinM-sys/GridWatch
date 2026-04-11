@@ -15,6 +15,7 @@ Built for **Spark Hack NYC 2026** (April 10-12, 2026).
 | Database | SQLite |
 | Vector DB | ChromaDB (1,800 docs, 6 collections) |
 | AI Model | NVIDIA Nemotron-Mini 4.2B via Ollama (on-device) |
+| Agent Skills | OpenClaw SKILL.md format |
 | Hardware | NVIDIA GB10 Grace Blackwell (Acer Veriton GN100) |
 | Voice/SMS | Twilio + Whisper |
 | Chat Bot | Discord.py |
@@ -169,6 +170,50 @@ Scrolling ticker across the top shows the most recent reports with source icons 
 
 ### Proximity Alerts
 Subscribe to alerts for a specific address. When a new incident is created nearby, subscribers are notified via their chosen channel.
+
+---
+
+## OpenClaw Agent Skills
+
+GridWatch implements three autonomous agent skills following the [OpenClaw SKILL.md format](https://docs.openclaw.ai/tools/skills). Each skill is a self-contained capability that the Nemotron agent can execute independently.
+
+### Skill 1: Neighborhood Risk Assessment
+**`skills/gridwatch-risk-assessment/`**
+
+Analyzes infrastructure risk for any NYC address by querying 6 live city data APIs in real-time.
+
+- Geocodes address → queries within 800m radius
+- Scores flooding, rodent, collision, housing, pothole, noise (0-100 each)
+- Detects cross-correlations between incident types
+- Returns overall infrastructure health score
+- Plots all historical data points on the map
+- **API:** `GET /api/risk/<address>`
+
+### Skill 2: Dispatch Auto-Triage
+**`skills/gridwatch-dispatch-triage/`**
+
+Automatically processes incoming citizen reports from any channel and triages them for dispatch.
+
+- Categorizes incidents using keyword analysis (25+ keywords across 12 categories)
+- Scores urgency using natural language analysis (CRITICAL → LOW)
+- Geocodes reported address with Manhattan/NYC bias
+- Checks RAG for repeat-offender locations
+- Recommends responding agency (FDNY, DEP, DOHMH, HPD, NYPD, DOT)
+- Auto-alerts nearby SMS subscribers via Twilio
+- Works across all intake channels: phone, SMS, Discord, web form
+
+### Skill 3: Flood Risk Monitor
+**`skills/gridwatch-flood-monitor/`**
+
+Monitors NYC flood conditions using FloodNet sensors, 311 data, and weather alerts.
+
+- Pulls live data from 200+ FloodNet sensors
+- Analyzes historical flood events with depth/duration
+- Cross-references with 311 sewer complaints
+- Integrates NWS weather alerts for active flood warnings
+- Predicts flood risk per sensor location
+- Overlays FEMA 2050s projected floodplain boundaries
+- Risk formula: `(flood_count * 2) + (max_depth * 0.5) + (sewer_complaints * 0.3)`
 
 ---
 
