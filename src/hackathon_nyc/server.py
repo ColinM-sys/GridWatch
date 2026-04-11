@@ -506,10 +506,16 @@ async def webhook_report(request: Request):
     # Guess category from keywords
     msg_lower = message.lower()
     category = "other"
-    for keyword, cat in [("flood", "flooding"), ("sewer", "sewer"), ("noise", "noise"),
-                         ("loud", "noise"), ("rat", "rodent"), ("mouse", "rodent"),
-                         ("heat", "heat"), ("hot water", "heat"), ("pothole", "street_condition"),
-                         ("tree", "tree"), ("water", "water"), ("construction", "noise")]:
+    for keyword, cat in [("flood", "flooding"), ("water main", "flooding"), ("sewer", "sewer"),
+                         ("gas leak", "sewer"), ("gas smell", "sewer"), ("noise", "noise"),
+                         ("loud", "noise"), ("music", "noise"), ("party", "noise"),
+                         ("rat", "rodent"), ("mouse", "rodent"), ("roach", "rodent"), ("pest", "rodent"),
+                         ("heat", "heat"), ("hot water", "heat"), ("no heat", "heat"),
+                         ("pothole", "street_condition"), ("road", "street_condition"), ("crack", "street_condition"),
+                         ("crash", "street_condition"), ("accident", "street_condition"),
+                         ("tree", "tree"), ("branch", "tree"),
+                         ("water", "water"), ("hydrant", "water"), ("leak", "water"),
+                         ("fire", "other"), ("smoke", "other"), ("construction", "noise")]:
         if keyword in msg_lower:
             category = cat
             break
@@ -1078,6 +1084,35 @@ async def generate_chat(request: Request):
     CHAT_HISTORY.append({"role": "user", "content": user_input})
     CHAT_HISTORY.append({"role": "assistant", "content": ai_response})
 
+    # For hotspot/worst/dangerous queries, generate answer from data if model failed
+    ql = user_input.lower()
+    if any(w in ql for w in ("hotspot", "worst", "dangerous", "concentration", "problem area")) and ("sorry" in output.lower() or "cannot" in output.lower() or "no record" in output.lower()):
+        stats = db.get_stats()
+        incidents = db.list_incidents(limit=50)
+        # Count by borough
+        borough_counts = {}
+        for inc in incidents:
+            b = inc.get("borough") or "Unknown"
+            borough_counts[b] = borough_counts.get(b, 0) + 1
+        # Count by category
+        cat_counts = stats.get("by_category", {})
+        top_cats = sorted(cat_counts.items(), key=lambda x: -x[1])[:5]
+        # Build summary
+        lines = [f"HOTSPOT ANALYSIS — {stats.get('total', 0)} active incidents:"]
+        if top_cats:
+            lines.append("Top incident types: " + ", ".join(f"{k} ({v})" for k, v in top_cats))
+        if borough_counts:
+            top_boros = sorted(borough_counts.items(), key=lambda x: -x[1])[:3]
+            lines.append("Highest concentration: " + ", ".join(f"{k} ({v})" for k, v in top_boros))
+        critical = [i for i in incidents if i.get("severity") in ("critical", "high")]
+        if critical:
+            lines.append(f"{len(critical)} critical/high severity incidents requiring immediate response")
+            for c in critical[:3]:
+                lines.append(f"  - {c.get('title', '?')[:50]} ({c.get('severity')}) at {c.get('address', '?')[:40]}")
+        if rag_points:
+            lines.append(f"{len(rag_points)} historical data points plotted on map")
+        output = "\n".join(lines)
+
     # Force correct count when geo-filter ran
     if rag_points:
         import re as _re2
@@ -1111,27 +1146,30 @@ async def neighborhood_risk(address: str):
     display_addr = geo.get("display_name", address)
     radius_miles = 0.5
 
-    # Query all RAG collections
+    # Query LIVE NYC Open Data APIs for this location
+    import aiohttp
     risk_data = {"flooding": [], "rodent": [], "collision": [], "housing": [], "pothole": [], "noise": []}
-    try:
-        from hackathon_nyc.tools.historical_lookup import historical_lookup as _hl
-        for coll_name, risk_key in [
-            ("nyc_flood_events", "flooding"),
-            ("nyc_rodent_inspections", "rodent"),
-            ("nyc_collisions", "collision"),
-            ("nyc_housing_violations", "housing"),
-            ("nyc_potholes", "pothole"),
-            ("nyc_311_current", "noise"),
-        ]:
+    all_points = []
+
+    async with aiohttp.ClientSession() as session:
+        queries = [
+            ("flooding", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=50&$order=created_date%20DESC&$where=complaint_type%20in('Sewer','Street%20Flooding','Water%20System')%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,complaint_type,created_date,descriptor"),
+            ("rodent", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=50&$order=created_date%20DESC&$where=complaint_type='Rodent'%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,complaint_type,created_date"),
+            ("collision", f"https://data.cityofnewyork.us/resource/h9gi-nx95.json?$limit=50&$order=crash_date%20DESC&$where=within_circle(location,{clat},{clon},800)&$select=latitude,longitude,number_of_persons_injured,number_of_persons_killed,crash_date"),
+            ("housing", f"https://data.cityofnewyork.us/resource/wvxf-dwi5.json?$limit=50&$order=inspectiondate%20DESC&$where=class='C'%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,inspectiondate,novdescription"),
+            ("pothole", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=50&$order=created_date%20DESC&$where=complaint_type='Street%20Condition'%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,complaint_type,created_date"),
+            ("noise", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=50&$order=created_date%20DESC&$where=complaint_type%20in('Noise%20-%20Residential','Noise%20-%20Street/Sidewalk')%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,complaint_type,created_date"),
+        ]
+        for risk_key, url in queries:
             try:
-                rag = await _hl(f"incidents near {address}", k=20, collections=[coll_name])
-                points = rag.get("points", [])
-                nearby = [p for p in points if _hav(clat, clon, p["lat"], p["lon"]) <= radius_miles]
-                risk_data[risk_key] = nearby
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                    data = await resp.json()
+                    for d in data:
+                        if d.get("latitude") and d.get("longitude"):
+                            risk_data[risk_key].append(d)
+                            all_points.append({"lat": float(d["latitude"]), "lon": float(d["longitude"]), "collection": risk_key})
             except Exception:
                 pass
-    except Exception:
-        pass
 
     # Also check dispatch DB
     incidents = db.list_incidents(limit=100)
