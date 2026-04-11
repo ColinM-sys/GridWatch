@@ -744,12 +744,12 @@
             <!-- Chat Tab -->
             <div class="tab-content" id="tab-chat">
                 <div style="padding:8px 12px;border-bottom:1px solid #2a2a35;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                    <button class="quick-btn" onclick="quickChat('Give me a sitrep')">📋 Sitrep</button>
-                    <button class="quick-btn" onclick="quickChat('What are the worst hotspots right now?')">🔥 Hotspots</button>
-                    <button class="quick-btn" onclick="quickChat('Show me all flooding reports')">🌊 Floods</button>
-                    <button class="quick-btn" onclick="quickChat('Show open incidents needing response')">🚨 Open</button>
-                    <button class="quick-btn" onclick="quickChat('Analyze data correlations and findings')">🔗 Findings</button>
-                    <button class="quick-btn" onclick="quickChat('What weather alerts are active?')">⛈️ Weather</button>
+                    <button class="quick-btn" onclick="quickChat('Give me a full sitrep with priorities')">📋 Sitrep</button>
+                    <button class="quick-btn" onclick="quickChat('Where are the most dangerous hotspots with the highest incident concentration?')">🔥 Hotspots</button>
+                    <button class="quick-btn" onclick="quickChat('Show flood history and which areas are most at risk near Manhattan')">🌊 Floods</button>
+                    <button class="quick-btn" onclick="quickChat('Which critical and high severity incidents need immediate dispatch?')">🚨 Critical</button>
+                    <button class="quick-btn" onclick="quickChat('What rat and rodent activity is happening near Brooklyn?')">🐀 Rodents</button>
+                    <button class="quick-btn" onclick="quickChat('Show crash and pothole data near Midtown Manhattan')">🕳️ Roads</button>
                     <label style="margin-left:auto;font-size:10px;color:#888;display:flex;align-items:center;gap:4px">
                         <input type="checkbox" id="tts-enabled" checked> 🔊 TTS
                     </label>
@@ -809,8 +809,8 @@
             style: 'mapbox://styles/mapbox/dark-v11',
             center: [-73.95, 40.75],
             zoom: 11,
-            pitch: 45,
-            bearing: -17,
+            pitch: 0,
+            bearing: 0,
             antialias: true,
             renderWorldCopies: false,
             minZoom: 9
@@ -820,14 +820,9 @@
 
         // Flatten pitch when zoomed out to prevent marker drift
         map.on('zoom', () => {
-            if (demoRunning) return; // Don't interfere with demo camera
-            const zoom = map.getZoom();
-            if (zoom < 12 && map.getPitch() > 0) {
-                map.easeTo({ pitch: 0, duration: 300 });
-            }
-            updateDeckLayers();
+            if (demoRunning) return;
+            if (typeof updateDeckLayers === 'function') updateDeckLayers();
         });
-
         // ==================== 3D BUILDINGS ====================
         map.on('style.load', () => {
             // Add 3D building extrusions
@@ -1127,7 +1122,7 @@
                 el.classList.add('clickable-marker');
             }
 
-            const marker = new mapboxgl.Marker({ element: el, anchor: 'center', pitchAlignment: 'viewport', rotationAlignment: 'viewport' })
+            const marker = new mapboxgl.Marker({ element: el, anchor: 'center', pitchAlignment: 'map', rotationAlignment: 'map' })
                 .setLngLat(lngLat);
 
             if (popupHtml) {
@@ -2224,7 +2219,14 @@
 
         function flyTo(lat, lng) {
             if (lat && lng) {
-                map.flyTo({ center: [lng, lat], zoom: 15, pitch: 50, duration: 800 });
+                // Auto-enable incidents layer if not already on
+                if (!layerVisible.incidents) {
+                    layerVisible.incidents = true;
+                    const incBtn = document.querySelector('.layer-btn[onclick*="incidents"]');
+                    if (incBtn) incBtn.classList.add('active');
+                    loadIncidents();
+                }
+                map.flyTo({ center: [lng, lat], zoom: 16, duration: 800 });
             }
         }
 
@@ -3559,7 +3561,7 @@
                 removeDemoNarration();
                 map.flyTo({
                     center: [-73.95, 40.75],
-                    zoom: 11, pitch: 45, bearing: -17,
+                    zoom: 11, pitch: 0, bearing: 0,
                     duration: 2000
                 });
             }
@@ -3621,7 +3623,7 @@
             buildingColorData.other = [];
             updateBuildingColors();
             // Reset map view
-            map.flyTo({ center: [-73.95, 40.75], zoom: 11, pitch: 45, bearing: -17, duration: 1500 });
+            map.flyTo({ center: [-73.95, 40.75], zoom: 11, pitch: 0, bearing: 0, duration: 1500 });
         }
 
         function demoSleep(ms) {

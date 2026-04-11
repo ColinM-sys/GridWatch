@@ -201,9 +201,8 @@ def register_twilio_routes(app):
             lat, lon, address = None, None, ""
             try:
                 import re
-                cleaned = re.sub(r'\b(report|there is|flooding|flood|noise|rats?|sewer|pothole|water|about|deep|inches|the|a|an)\b', ' ', body, flags=re.IGNORECASE)
-                cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-                for query in [cleaned + ', New York City', body + ', New York']:
+                # Don't strip location-relevant words, just prepend NYC context
+                for query in [body + ', Manhattan, New York City', body + ', New York City, NY']:
                     geo = await geocoding.geocode_address(query)
                     if "error" not in geo:
                         lat, lon = geo["lat"], geo["lon"]

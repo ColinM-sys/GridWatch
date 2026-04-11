@@ -825,7 +825,9 @@ async def generate_chat(request: Request):
                     "have there been", "has there been", "trend", "last year",
                     "last month", "in the past", "what happened", "show me",
                     "crash", "collision", "accident", "flood", "rat", "rodent",
-                    "pothole", "violation", "complaint", "near "]
+                    "pothole", "violation", "complaint", "near ", "hotspot",
+                    "worst", "dangerous", "most", "where are", "which area",
+                    "concentration", "cluster", "problem area"]
     if any(t in user_input.lower() for t in rag_triggers):
         try:
             from hackathon_nyc.tools.historical_lookup import historical_lookup as _hl
@@ -840,11 +842,15 @@ async def generate_chat(request: Request):
                 (("311", "complaint", "noise"), ["nyc_311_current"]),
             ]
             picked: list = []
-            for keys, colls in topic_map:
-                if any(k in ql for k in keys):
-                    picked = colls
-                    break  # first match wins, single-topic
-            collections = picked or None  # None => all defaults
+            # Hotspot/worst/dangerous queries search ALL collections
+            if any(w in ql for w in ("hotspot", "worst", "dangerous", "most", "problem area", "cluster")):
+                collections = None  # all collections
+            else:
+                for keys, colls in topic_map:
+                    if any(k in ql for k in keys):
+                        picked = colls
+                        break  # first match wins, single-topic
+                collections = picked or None
             rag = await _hl(user_input, k=6, collections=collections)
             chunks = rag.get("results", [])
             rag_points = rag.get("points", [])
