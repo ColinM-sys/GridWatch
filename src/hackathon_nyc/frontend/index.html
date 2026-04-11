@@ -827,12 +827,9 @@
             if (demoRunning) return;
             if (typeof updateDeckLayers === 'function') updateDeckLayers();
         });
-        // Force flat view outside demo to prevent icon distortion
-        map.on('moveend', () => {
-            if (!demoRunning && map.getPitch() > 0) {
-                map.easeTo({ pitch: 0, duration: 200 });
-            }
-        });
+        // Disable right-click drag rotation/pitch to prevent icon drift
+        map.dragRotate.disable();
+        map.touchZoomRotate.disableRotation();
         // ==================== 3D BUILDINGS ====================
         map.on('style.load', () => {
             // Add 3D building extrusions

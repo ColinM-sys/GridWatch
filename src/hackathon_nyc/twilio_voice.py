@@ -206,7 +206,7 @@ def register_twilio_routes(app):
                 cleaned = re.sub(r'\s+', ' ', cleaned).strip()
                 if not cleaned or len(cleaned) < 3:
                     cleaned = body
-                for query in [cleaned + ', Manhattan, New York City', cleaned + ', New York City, NY', body + ', New York City, NY']:
+                for query in [cleaned + ', Manhattan, NYC', cleaned + ', Brooklyn, NYC', cleaned + ', Queens, NYC', cleaned + ', New York City, NY']:
                     geo = await geocoding.geocode_address(query)
                     if "error" not in geo:
                         lat, lon = geo["lat"], geo["lon"]
