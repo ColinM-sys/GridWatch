@@ -944,7 +944,8 @@ async def generate_chat(request: Request):
     # Call Ollama
     try:
         async with _aiohttp.ClientSession() as session:
-            async with session.post("http://localhost:11435/api/chat", json={
+            ollama_host = os.getenv("OLLAMA_HOST", "localhost:11435")
+            async with session.post(f"http://{ollama_host}/api/chat", json={
                 "model": "nemotron-mini",
                 "messages": messages,
                 "stream": False,
@@ -1497,7 +1498,7 @@ async def report_photo(
                 "stream": False,
             }
             async with session.post(
-                "http://localhost:11434/api/generate",
+                f"http://{os.getenv('OLLAMA_HOST', 'localhost')}:11434/api/generate",
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=120),
             ) as resp:
