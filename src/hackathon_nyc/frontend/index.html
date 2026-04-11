@@ -1501,7 +1501,7 @@
             event.target.classList.add('active');
             document.getElementById('tab-' + tab).classList.add('active');
             if (tab === 'alerts') loadSubscriptions();
-            if (tab === 'dispatch') loadIncidents();
+            if (tab === 'dispatch') { loadIncidents(); clearMarkerLayer('rag'); }
         }
 
         // --- Map click for placing incidents ---
@@ -1860,11 +1860,16 @@
                 // Show/hide sub-layers based on checkbox state
                 if (document.getElementById('toggle-sensors').checked) showMarkerLayer('floodSensors');
                 if (document.getElementById('toggle-311floods').checked) showMarkerLayer('flood311');
-                if (document.getElementById('toggle-floodplain').checked) {
+                if (document.getElementById('toggle-floodplain').checked && layerVisible.floods) {
                     await loadFloodplain();
                     try {
                         if (map.getLayer('floodplain-fill')) map.setLayoutProperty('floodplain-fill', 'visibility', 'visible');
                         if (map.getLayer('floodplain-line')) map.setLayoutProperty('floodplain-line', 'visibility', 'visible');
+                    } catch(e) {}
+                } else {
+                    try {
+                        if (map.getLayer('floodplain-fill')) map.setLayoutProperty('floodplain-fill', 'visibility', 'none');
+                        if (map.getLayer('floodplain-line')) map.setLayoutProperty('floodplain-line', 'visibility', 'none');
                     } catch(e) {}
                 }
 
@@ -2495,6 +2500,7 @@
         };
 
         function toggleLayer(name) {
+            clearMarkerLayer('rag');
             const btn = event.target;
             if (name === 'heatmap') {
                 heatmapActive = !heatmapActive;
@@ -3464,13 +3470,13 @@
             layerVisible.heatmap = true;
             await rebuildHeatmap();
             // Dim the heatmap so markers show through
-            try { if (map.getLayer('heatmap-layer')) map.setPaintProperty('heatmap-layer', 'heatmap-opacity', 0.35); } catch(e) {}
+            try { if (map.getLayer('heatmap-layer')) map.setPaintProperty('heatmap-layer', 'heatmap-opacity', 0.15); } catch(e) {}
 
             if (!demoRunning) return;
 
             // Start tour
-            const bearings = [-17, 45, -45, 90, 0, 135, -90, 30, -60, 180];
-            const pitches = [30, 35, 25, 30, 20, 35, 25, 30, 20, 30];
+            const bearings = [0, 15, -15, 10, 0, -10, 5, -5, 10, 0];
+            const pitches = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
             // Tour stops: hotspots + specific feature showcases
             const showcases = [
@@ -3489,7 +3495,17 @@
             for (let i = 0; i < hotspots.length; i++) {
                 if (!demoRunning) break;
                 const hs = hotspots[i];
-                const sc = showcases[i % showcases.length];
+                // Match showcase to dominant category in this cluster
+                const topType = (Object.entries(hs.types).sort((a,b) => b[1] - a[1])[0]?.[0] || '').toLowerCase();
+                const sc = topType.includes('flood') || topType.includes('sewer') ? { label: 'FLOOD ZONE', icon: '🌊', zoom: 15 } :
+                           topType.includes('rodent') || topType.includes('rat') ? { label: 'RODENT HOTSPOT', icon: '🐀', zoom: 16 } :
+                           topType.includes('crash') || topType.includes('collision') ? { label: 'CRASH CLUSTER', icon: '🚗', zoom: 15.5 } :
+                           topType.includes('housing') ? { label: 'HOUSING CRISIS', icon: '🏚️', zoom: 16 } :
+                           topType.includes('pothole') ? { label: 'POTHOLE DANGER ZONE', icon: '🕳️', zoom: 16 } :
+                           topType.includes('noise') || topType.includes('heat') ? { label: 'NOISE + HEAT ZONE', icon: '🎵', zoom: 15.5 } :
+                           topType.includes('restaurant') ? { label: 'HEALTH VIOLATION ZONE', icon: '🍽️', zoom: 16 } :
+                           topType.includes('construction') ? { label: 'CONSTRUCTION AREA', icon: '🏗️', zoom: 15 } :
+                           showcases[i % showcases.length];
                 const severity = hs.count >= 15 ? 'CRITICAL ZONE' : hs.count >= 8 ? 'HIGH PRIORITY AREA' : hs.count >= 3 ? 'MODERATE ZONE' : 'MONITORING AREA';
                 const sevColor = hs.count >= 15 ? '#ff2222' : hs.count >= 8 ? '#ff8800' : hs.count >= 3 ? '#ffcc00' : '#76b900';
 
@@ -3545,6 +3561,11 @@
                         <div style="color:#aaa;margin-bottom:6px">${hs.count} reports in this area</div>
                         <div style="border-top:1px solid #333;padding-top:6px">${typeLines}</div>
                         ${corrLines}
+                        <div style="border-top:1px solid #333;margin-top:6px;padding-top:6px;">
+                            <div style="color:#fff;font-weight:700;font-size:11px">DISPATCH RECOMMENDATION</div>
+                            <div style="color:#76b900;font-size:12px;margin-top:3px">Send: ${Object.keys(hs.types).map(t => t.includes('Crash') ? 'NYPD + EMS' : t.includes('Flood') ? 'DEP + FDNY' : t.includes('Rodent') ? 'DOHMH' : t.includes('Housing') ? 'HPD' : t.includes('Pothole') ? 'DOT' : t.includes('Restaurant') ? 'DOHMH' : t.includes('Noise') ? 'DEP + NYPD' : 'OEM').filter((v,i,a) => a.indexOf(v)===i).join(' + ')}</div>
+                            ${hs.count >= 8 ? '<div style="color:#ff4444;font-size:11px;margin-top:2px;font-weight:700">⚠️ Multi-agency coordination recommended</div>' : ''}
+                        </div>
                     </div>`)
                     .addTo(map);
 
