@@ -969,7 +969,8 @@ async def generate_chat(request: Request):
                 lines = [f"SITREP - {data.get('total', 0)} total incidents:"]
                 lines.append(f"Open: {data.get('open', 0)} | In Progress: {data.get('in_progress', 0)} | Resolved: {data.get('resolved', 0)}")
                 if 'by_category' in data:
-                    cats = ', '.join(f"{k}: {v}" for k, v in sorted(data['by_category'].items(), key=lambda x: -x[1]))
+                    cat_emoji = {"flooding": "🌊", "sewer": "🚰", "noise": "🎵", "rodent": "🐀", "heat": "🥶", "tree": "🌳", "street_condition": "🕳️", "water": "💧", "health": "🏥", "fire": "🔥", "other": "⚠️", "pothole": "🕳️"}
+                    cats = ', '.join(f"{cat_emoji.get(k, '⚠️')} {k}: {v}" for k, v in sorted(data['by_category'].items(), key=lambda x: -x[1]))
                     lines.append(f"By type: {cats}")
                 if 'by_severity' in data:
                     sevs = ', '.join(f"{k}: {v}" for k, v in data['by_severity'].items())
@@ -1214,7 +1215,8 @@ async def generate_chat(request: Request):
                         bs = data.get('by_status', {})
                         lines.append(f"Open: {bs.get('open', 0)} | In Progress: {bs.get('in_progress', 0)} | Resolved: {bs.get('resolved', 0)}")
                         if 'by_category' in data:
-                            cats = ', '.join(f"{k}: {v}" for k, v in sorted(data['by_category'].items(), key=lambda x: -x[1]))
+                            ce = {"flooding": "🌊", "sewer": "🚰", "noise": "🎵", "rodent": "🐀", "heat": "🥶", "tree": "🌳", "street_condition": "🕳️", "water": "💧", "health": "🏥", "fire": "🔥", "other": "⚠️", "pothole": "🕳️"}
+                            cats = ', '.join(f"{ce.get(k, '⚠️')} {k}: {v}" for k, v in sorted(data['by_category'].items(), key=lambda x: -x[1]))
                             lines.append(f"By type: {cats}")
                         output = '\n'.join(lines)
                 except Exception:
