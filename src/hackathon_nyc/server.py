@@ -1105,6 +1105,39 @@ async def generate_chat(request: Request):
 
     # If model dumped raw field names, replace with clean summary
     raw_indicators = ['sensor_id:', 'inspection_type:', 'job_ticket', 'bbl:', 'boro_code:', 'on_street_name:', 'crash_date:', 'violation', 'defnum', 'the_geom', 'number_of_persons', 'coordinates', 'MultiLineString', 'MultiPolygon', '"id":', '"category":', '"severity":']
+    # Catch when model says "no data" but RAG found records, or model is off-topic
+    ql = user_input.lower()
+    needs_override = False
+    if rag_points:
+        # Model says no data but we have records
+        if any(w in output.lower() for w in ("sorry", "no data", "not available", "cannot find", "don't have", "does not contain", "no crashes", "no record")):
+            needs_override = True
+        # Model talks about wrong topic
+        topic_checks = [
+            (("rat", "rodent", "mouse"), ("rodent", "rat", "pest", "inspection")),
+            (("crash", "collision", "accident"), ("crash", "collision", "injured", "killed")),
+            (("flood", "water", "sewer"), ("flood", "water", "sewer", "depth")),
+            (("pothole", "road", "street condition"), ("pothole", "street", "road")),
+            (("housing", "violation", "landlord"), ("housing", "violation", "hpd")),
+        ]
+        for user_keywords, expected_in_response in topic_checks:
+            if any(k in ql for k in user_keywords):
+                if not any(e in output.lower() for e in expected_in_response):
+                    needs_override = True
+                break
+
+    if needs_override and rag_points:
+        collection_counts = {}
+        for p in rag_points:
+            coll = p.get('collection', 'unknown').replace('nyc_', '').replace('_', ' ').title()
+            collection_counts[coll] = collection_counts.get(coll, 0) + 1
+        topic_emoji = {"Flood Events": "🌊", "Rodent Inspections": "🐀", "Collisions": "🚗", "Housing Violations": "🏚️", "Potholes": "🕳️", "311 Current": "📋"}
+        parts = []
+        for k, v in sorted(collection_counts.items(), key=lambda x: -x[1]):
+            emoji = topic_emoji.get(k, "📊")
+            parts.append(f"{emoji} {v} {k.lower()}")
+        output = f"Found {len(rag_points)} records in this area: " + ", ".join(parts)
+
     if any(ind in output for ind in raw_indicators) or (output.strip().startswith('[') and len(output) > 50):
         # Model failed to summarize — generate server-side summary
         if rag_points:
