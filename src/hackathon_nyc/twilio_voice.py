@@ -48,7 +48,7 @@ def register_twilio_routes(app):
         host = request.headers.get("host", "localhost:8000")
         scheme = "wss" if request.url.scheme == "https" else "ws"
 
-        pipecat_mode = True
+        pipecat_mode = False  # Voicemail mode — Pipecat TTS not available on ARM64
 
         if pipecat_mode:
             twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -118,16 +118,38 @@ def register_twilio_routes(app):
         if not transcription:
             return {"status": "no transcription"}
 
+        # Fix common Twilio/Whisper transcription errors
+        import re
+        transcription = re.sub(r'\breading\b', 'flooding', transcription, flags=re.IGNORECASE)
+        transcription = re.sub(r'\bbleeding\b', 'flooding', transcription, flags=re.IGNORECASE)
+        transcription = re.sub(r'\bblooding\b', 'flooding', transcription, flags=re.IGNORECASE)
+        transcription = re.sub(r'\$(\d+)\.00', r'\1', transcription)
+        transcription = re.sub(r'\$(\d+)', r'\1', transcription)
+
+        # Detect category from transcription
+        tl = transcription.lower()
+        category = "other"
+        if any(w in tl for w in ["flood", "water", "sewer", "hydrant", "water main"]):
+            category = "flooding"
+        elif any(w in tl for w in ["rat", "rodent", "mouse", "mice", "pest"]):
+            category = "rodent"
+        elif any(w in tl for w in ["pothole", "crack", "road", "street condition", "pavement"]):
+            category = "pothole"
+        elif any(w in tl for w in ["noise", "loud", "music", "construction"]):
+            category = "noise"
+        elif any(w in tl for w in ["tree", "branch", "fallen tree"]):
+            category = "tree"
+        elif any(w in tl for w in ["fire", "smoke", "burning"]):
+            category = "fire"
+        elif any(w in tl for w in ["sick", "medical", "health", "hurt", "injured", "unconscious"]):
+            category = "health"
+
         # Try to geocode address from transcription
         lat, lon, address = None, None, ""
         try:
-            import re
-            # Fix common Twilio transcription errors
-            transcription = re.sub(r'\$(\d+)\.00', r'\1', transcription)
-            transcription = re.sub(r'\$(\d+)', r'\1', transcription)
-            cleaned = re.sub(r'\b(report|there is|flooding|flood|noise|rats?|sewer|pothole|water|about|deep|inches|feet|foot|the|a|an|i want to)\b', ' ', transcription, flags=re.IGNORECASE)
+            cleaned = re.sub(r'\b(report|there is|flooding|flood|noise|rats?|sewer|pothole|water|about|deep|inches|feet|foot|the|a|an|i want to|fire|smoke|tree)\b', ' ', transcription, flags=re.IGNORECASE)
             cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-            for query in [cleaned + ', New York City', transcription + ', New York']:
+            for query in [cleaned + ', Manhattan, New York City', cleaned + ', New York City', transcription + ', New York']:
                 geo = await geocoding.geocode_address(query)
                 if "error" not in geo:
                     lat, lon = geo["lat"], geo["lon"]
@@ -138,7 +160,7 @@ def register_twilio_routes(app):
 
         incident = db.create_incident(
             title=f"Voice report: {transcription[:60]}",
-            category="other",
+            category=category,
             description=f"Voicemail from {caller}: {transcription}\n\nRecording: {recording_url}",
             source="citizen_voice",
             latitude=lat,

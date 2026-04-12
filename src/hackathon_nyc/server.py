@@ -544,11 +544,14 @@ async def webhook_report(request: Request):
     incident["urgency_score"] = urgency_score
     incident["urgency_label"] = urgency_label
 
-    # Auto-alert nearby subscribers via SMS
+    # Auto-alert nearby subscribers via SMS + Discord
     if lat and lon:
         try:
             subscribers = db.find_subscribers_near(lat, lon, category)
             if subscribers:
+                alert_msg = f"⚠️ GRIDWATCH ALERT: {category.upper()} reported near {address[:60]}. {urgency_label} severity. #{incident['id'][:8]}"
+
+                # SMS alerts
                 import os
                 from twilio.rest import Client as TwilioClient
                 sid = os.getenv("TWILIO_ACCOUNT_SID")
@@ -559,14 +562,35 @@ async def webhook_report(request: Request):
                     for sub in subscribers:
                         if sub.get("contact_type") == "sms" and sub.get("contact"):
                             try:
-                                tw.messages.create(
-                                    body=f"⚠️ GRIDWATCH ALERT: {category.upper()} reported near {address[:60]}. {urgency_label} severity. #{incident['id'][:8]}",
-                                    from_=from_num,
-                                    to=sub["contact"],
-                                )
-                                logger.info(f"[Alert] SMS sent to {sub['contact']} for incident #{incident['id'][:8]}")
+                                tw.messages.create(body=alert_msg, from_=from_num, to=sub["contact"])
+                                logger.info(f"[Alert] SMS sent to {sub['contact']}")
                             except Exception as e:
                                 logger.warning(f"[Alert] SMS failed to {sub['contact']}: {e}")
+
+                # Discord alerts — DM users who subscribed via Discord
+                for sub in subscribers:
+                    if sub.get("contact_type") == "discord" and sub.get("contact"):
+                        try:
+                            import aiohttp as _alert_aiohttp
+                            discord_token = os.getenv("DISCORD_TOKEN", "")
+                            async with _alert_aiohttp.ClientSession() as sess:
+                                # Create DM channel
+                                dm_resp = await sess.post(
+                                    "https://discord.com/api/v10/users/@me/channels",
+                                    headers={"Authorization": f"Bot {discord_token}", "Content-Type": "application/json"},
+                                    json={"recipient_id": sub["contact"]}
+                                )
+                                if dm_resp.status == 200:
+                                    dm_data = await dm_resp.json()
+                                    # Send alert message
+                                    await sess.post(
+                                        f"https://discord.com/api/v10/channels/{dm_data['id']}/messages",
+                                        headers={"Authorization": f"Bot {discord_token}", "Content-Type": "application/json"},
+                                        json={"content": alert_msg}
+                                    )
+                                    logger.info(f"[Alert] Discord DM sent to {sub['contact']}")
+                        except Exception as e:
+                            logger.warning(f"[Alert] Discord DM failed to {sub['contact']}: {e}")
         except Exception as e:
             logger.warning(f"[Alert] check failed: {e}")
 
@@ -616,11 +640,18 @@ async def websocket_endpoint(websocket: WebSocket):
     transport_type, call_data = await parse_telephony_websocket(websocket)
     print(f"[Pipecat] Detected: {transport_type}, stream={call_data.get('stream_id')}")
 
+    from pipecat.transports.websocket.fastapi import FastAPIWebsocketTransport
+    from pipecat.serializers.twilio import TwilioFrameSerializer
+
     params = FastAPIWebsocketParams(
         audio_in_enabled=True,
         audio_out_enabled=True,
+        serializer=TwilioFrameSerializer(
+            stream_sid=call_data.get("stream_id", ""),
+            params=TwilioFrameSerializer.InputParams(auto_hang_up=False),
+        ),
     )
-    transport = await _create_telephony_transport(websocket, params, transport_type, call_data)
+    transport = FastAPIWebsocketTransport(websocket=websocket, params=params)
 
     # STT
     try:
@@ -942,7 +973,7 @@ async def generate_chat(request: Request):
     try:
         async with _aiohttp.ClientSession() as session:
             import os as _os2
-            ollama_host = _os2.getenv("OLLAMA_HOST", "localhost:11435")
+            ollama_host = _os2.getenv("OLLAMA_HOST", "localhost:11434")
             async with session.post(f"http://{ollama_host}/api/chat", json={
                 "model": "nemotron-mini",
                 "messages": messages,
@@ -1078,25 +1109,62 @@ async def generate_chat(request: Request):
         except Exception as e:
             action_result = f"Action failed: {e}"
 
-    # For urgent/dispatch queries, override with server-side answer if model gave a bad response
+    # Server-side answers for dispatch queries
     ql = user_input.lower()
-    if any(w in ql for w in ("urgent", "immediate", "dispatch", "priority", "critical", "need", "hotspot", "worst", "sitrep", "status")):
+    cat_emoji = {"flooding": "🌊", "sewer": "🚰", "noise": "🎵", "rodent": "🐀", "heat": "🥶", "tree": "🌳", "street_condition": "🕳️", "water": "💧", "health": "🏥", "fire": "🔥", "other": "⚠️", "pothole": "🕳️"}
+
+    if any(w in ql for w in ("sitrep", "status")):
+        # Full dispatch status with category breakdown
+        stats = db.get_stats()
         incidents_list = db.list_incidents(limit=50)
         critical = [i for i in incidents_list if i.get("severity") in ("critical", "high")]
-        stats = db.get_stats()
-        cat_emoji = {"flooding": "🌊", "sewer": "🚰", "noise": "🎵", "rodent": "🐀", "heat": "🥶", "tree": "🌳", "street_condition": "🕳️", "water": "💧", "health": "🏥", "fire": "🔥", "other": "⚠️", "pothole": "🕳️"}
         lines = [f"DISPATCH STATUS — {stats.get('total', 0)} total incidents:"]
         lines.append(f"Open: {stats.get('open', 0)} | In Progress: {stats.get('in_progress', 0)} | Resolved: {stats.get('resolved', 0)}")
         if stats.get('by_category'):
-            cat_lines = []
-            for k, v in sorted(stats['by_category'].items(), key=lambda x: -x[1]):
-                cat_lines.append(f"  {cat_emoji.get(k, '⚠️')} {k}: {v}")
+            cat_lines = [f"  {cat_emoji.get(k, '⚠️')} {k}: {v}" for k, v in sorted(stats['by_category'].items(), key=lambda x: -x[1])]
             lines.append("By type:\n" + "\n".join(cat_lines))
         if critical:
             lines.append(f"\n🚨 {len(critical)} CRITICAL/HIGH priority:")
             for c in critical[:5]:
-                e = cat_emoji.get(c.get("category"), "⚠️")
-                lines.append(f"  {e} {c.get('title', '?')[:45]} — {c.get('severity','').upper()}")
+                lines.append(f"  {cat_emoji.get(c.get('category'), '⚠️')} {c.get('title', '?')[:45]} — {c.get('severity','').upper()}")
+        ai_response = "\n".join(lines)
+
+    elif any(w in ql for w in ("urgent", "immediate", "dispatch", "need")):
+        # Just critical/high incidents
+        incidents_list = db.list_incidents(limit=50)
+        critical = [i for i in incidents_list if i.get("severity") in ("critical", "high")]
+        if critical:
+            lines = [f"🚨 {len(critical)} incidents need immediate attention:"]
+            for c in critical[:6]:
+                lines.append(f"  {cat_emoji.get(c.get('category'), '⚠️')} {c.get('title', '?')[:45]} — {c.get('severity','').upper()} at {c.get('address', '')[:35]}")
+            ai_response = "\n".join(lines)
+        else:
+            ai_response = "No critical or high severity incidents right now."
+
+    elif any(w in ql for w in ("hotspot", "worst")):
+        # Top categories + boroughs
+        stats = db.get_stats()
+        incidents_list = db.list_incidents(limit=50)
+        borough_counts = {}
+        for inc in incidents_list:
+            addr = inc.get("address", "")
+            # Extract borough from address
+            b = "Unknown"
+            for boro in ("Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"):
+                if boro.lower() in addr.lower():
+                    b = boro
+                    break
+            borough_counts[b] = borough_counts.get(b, 0) + 1
+        top_cats = sorted(stats.get('by_category', {}).items(), key=lambda x: -x[1])[:5]
+        top_boros = sorted(borough_counts.items(), key=lambda x: -x[1])[:3]
+        lines = [f"TOP HOTSPOTS — {stats.get('total', 0)} active incidents:"]
+        lines.append("Highest volume:")
+        for k, v in top_cats:
+            lines.append(f"  {cat_emoji.get(k, '⚠️')} {k}: {v}")
+        if top_boros:
+            lines.append("Concentration:")
+            for b, v in top_boros:
+                lines.append(f"  📍 {b}: {v} incidents")
         ai_response = "\n".join(lines)
 
     # Build final response
@@ -1249,30 +1317,70 @@ async def neighborhood_risk(address: str):
 
     clat, clon = float(geo["lat"]), float(geo["lon"])
     display_addr = geo.get("display_name", address)
+    # Extract neighborhood from address parts — skip building name (idx 0-1), street names, boroughs
+    parts = [p.strip() for p in display_addr.split(",")]
+    skip_words = {"United States", "New York", "New York County", "USA", "Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"}
+    street_words = ("Street", "Avenue", "Boulevard", "Drive", "Place", "Road", "Lane", "Way", "Ave", "Blvd")
+    neighborhood = address  # fallback to user input
+    for p in parts[2:]:  # skip building name and street number
+        if (p not in skip_words and not p.isdigit() and not (p and p[0].isdigit())
+            and "Community Board" not in p
+            and not any(sw in p for sw in street_words)):
+            neighborhood = p
+            break
+    # If we got a building name or nothing useful, use the user's input cleaned up
+    boroughs = ("Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island")
+    if neighborhood in boroughs or neighborhood == address:
+        clean = address
+        for b in boroughs:
+            clean = clean.replace(b, "")
+        clean = clean.strip().rstrip(",").strip()
+        neighborhood = clean or address
     radius_miles = 0.5
 
-    # Query LIVE NYC Open Data APIs for this location
+    # Query LIVE NYC Open Data APIs — recent 90 days, count frequency for scoring
     import aiohttp
-    risk_data = {"flooding": [], "rodent": [], "collision": [], "housing": [], "pothole": [], "noise": []}
+    from datetime import datetime, timedelta
+    cutoff = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%dT00:00:00")
+    risk_counts = {"flooding": 0, "rodent": 0, "collision": 0, "housing": 0, "pothole": 0, "noise": 0}
     all_points = []
+    R = 400  # 400m radius
 
     async with aiohttp.ClientSession() as session:
+        # Recent count + point queries (last 90 days only)
         queries = [
-            ("flooding", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=50&$order=created_date%20DESC&$where=complaint_type%20in('Sewer','Street%20Flooding','Water%20System')%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,complaint_type,created_date,descriptor"),
-            ("rodent", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=50&$order=created_date%20DESC&$where=complaint_type='Rodent'%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,complaint_type,created_date"),
-            ("collision", f"https://data.cityofnewyork.us/resource/h9gi-nx95.json?$limit=50&$order=crash_date%20DESC&$where=within_circle(location,{clat},{clon},800)&$select=latitude,longitude,number_of_persons_injured,number_of_persons_killed,crash_date"),
-            ("housing", f"https://data.cityofnewyork.us/resource/wvxf-dwi5.json?$limit=50&$order=inspectiondate%20DESC&$where=class='C'%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,inspectiondate,novdescription"),
-            ("pothole", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=50&$order=created_date%20DESC&$where=complaint_type='Street%20Condition'%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,complaint_type,created_date"),
-            ("noise", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=50&$order=created_date%20DESC&$where=complaint_type%20in('Noise%20-%20Residential','Noise%20-%20Street/Sidewalk')%20AND%20within_circle(location,{clat},{clon},800)&$select=latitude,longitude,complaint_type,created_date"),
+            ("flooding", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=30&$order=created_date%20DESC&$where=created_date>'{cutoff}'%20AND%20complaint_type%20in('Sewer','Street%20Flooding','Water%20System')%20AND%20within_circle(location,{clat},{clon},{R})&$select=latitude,longitude,complaint_type,created_date"),
+            ("rodent", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=30&$order=created_date%20DESC&$where=created_date>'{cutoff}'%20AND%20complaint_type='Rodent'%20AND%20within_circle(location,{clat},{clon},{R})&$select=latitude,longitude,complaint_type,created_date"),
+            ("collision", f"https://data.cityofnewyork.us/resource/h9gi-nx95.json?$limit=30&$order=crash_date%20DESC&$where=crash_date>'{cutoff}'%20AND%20within_circle(location,{clat},{clon},{R})&$select=latitude,longitude,number_of_persons_injured,crash_date"),
+            ("housing", f"https://data.cityofnewyork.us/resource/wvxf-dwi5.json?$limit=30&$order=inspectiondate%20DESC&$where=inspectiondate>'{cutoff}'%20AND%20class='C'%20AND%20within_circle(location,{clat},{clon},{R})&$select=latitude,longitude,inspectiondate"),
+            ("pothole", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=30&$order=created_date%20DESC&$where=created_date>'{cutoff}'%20AND%20complaint_type='Street%20Condition'%20AND%20within_circle(location,{clat},{clon},{R})&$select=latitude,longitude,complaint_type,created_date"),
+            ("noise", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=30&$order=created_date%20DESC&$where=created_date>'{cutoff}'%20AND%20complaint_type%20in('Noise%20-%20Residential','Noise%20-%20Street/Sidewalk')%20AND%20within_circle(location,{clat},{clon},{R})&$select=latitude,longitude,complaint_type,created_date"),
         ]
+        # Also get true counts for the 90-day window
+        count_queries = [
+            ("flooding", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$select=count(*)&$where=created_date>'{cutoff}'%20AND%20complaint_type%20in('Sewer','Street%20Flooding','Water%20System')%20AND%20within_circle(location,{clat},{clon},{R})"),
+            ("rodent", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$select=count(*)&$where=created_date>'{cutoff}'%20AND%20complaint_type='Rodent'%20AND%20within_circle(location,{clat},{clon},{R})"),
+            ("collision", f"https://data.cityofnewyork.us/resource/h9gi-nx95.json?$select=count(*)&$where=crash_date>'{cutoff}'%20AND%20within_circle(location,{clat},{clon},{R})"),
+            ("housing", f"https://data.cityofnewyork.us/resource/wvxf-dwi5.json?$select=count(*)&$where=inspectiondate>'{cutoff}'%20AND%20class='C'%20AND%20within_circle(location,{clat},{clon},{R})"),
+            ("pothole", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$select=count(*)&$where=created_date>'{cutoff}'%20AND%20complaint_type='Street%20Condition'%20AND%20within_circle(location,{clat},{clon},{R})"),
+            ("noise", f"https://data.cityofnewyork.us/resource/erm2-nwe9.json?$select=count(*)&$where=created_date>'{cutoff}'%20AND%20complaint_type%20in('Noise%20-%20Residential','Noise%20-%20Street/Sidewalk')%20AND%20within_circle(location,{clat},{clon},{R})"),
+        ]
+
+        # Run all queries
         for risk_key, url in queries:
             try:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
                     data = await resp.json()
                     for d in data:
                         if d.get("latitude") and d.get("longitude"):
-                            risk_data[risk_key].append(d)
                             all_points.append({"lat": float(d["latitude"]), "lon": float(d["longitude"]), "collection": risk_key})
+            except Exception:
+                pass
+        for risk_key, url in count_queries:
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                    data = await resp.json()
+                    risk_counts[risk_key] = int(data[0].get("count", 0)) if data else 0
             except Exception:
                 pass
 
@@ -1281,24 +1389,21 @@ async def neighborhood_risk(address: str):
     nearby_incidents = [i for i in incidents if i.get("latitude") and i.get("longitude")
                         and _hav(clat, clon, i["latitude"], i["longitude"]) <= radius_miles]
 
-    # Score each category — scaled for NYC density (800m radius captures a lot)
-    def score_cat(count, thresholds):
-        if count >= thresholds[3]: return 100  # CRITICAL
-        if count >= thresholds[2]: return 75   # HIGH
-        if count >= thresholds[1]: return 50   # MEDIUM
-        if count >= thresholds[0]: return 25   # LOW
-        return 0                               # NONE
+    # Score by recent report frequency vs NYC avg (last 90 days, 400m radius)
+    # More reports = more risk. Avg NYC neighborhood sees this many in 90 days within 400m:
+    nyc_avg = {"flooding": 15, "rodent": 25, "collision": 20, "housing": 10, "pothole": 18, "noise": 30}
 
-    scores = {
-        "flooding": score_cat(len(risk_data["flooding"]), (5, 15, 30, 45)),
-        "rodent": score_cat(len(risk_data["rodent"]), (5, 15, 30, 45)),
-        "collision": score_cat(len(risk_data["collision"]), (3, 10, 25, 40)),
-        "housing": score_cat(len(risk_data["housing"]), (3, 10, 25, 40)),
-        "pothole": score_cat(len(risk_data["pothole"]), (5, 15, 30, 45)),
-        "noise": score_cat(len(risk_data["noise"]), (10, 25, 40, 50)),
-    }
+    def score_vs_avg(count, avg):
+        ratio = count / max(avg, 1)
+        if ratio >= 2.0: return 100    # 2x+ avg = CRITICAL
+        if ratio >= 1.5: return 75     # 1.5x avg = HIGH
+        if ratio >= 1.0: return 50     # at avg = MODERATE
+        if ratio >= 0.5: return 25     # half avg = LOW
+        return 0                       # well below avg = NONE
 
-    risk_labels = {0: "NONE", 25: "LOW", 50: "MEDIUM", 75: "HIGH", 100: "CRITICAL"}
+    scores = {k: score_vs_avg(risk_counts[k], nyc_avg[k]) for k in nyc_avg}
+
+    risk_labels = {0: "NONE", 25: "LOW", 50: "MODERATE", 75: "HIGH", 100: "CRITICAL"}
     overall = max(1, 100 - int(sum(scores.values()) / len(scores)))
 
     # Find correlations
@@ -1317,18 +1422,15 @@ async def neighborhood_risk(address: str):
     top_concern = {"flooding": "Flooding/Sewer", "rodent": "Rodent Activity", "collision": "Vehicle Crashes",
                    "housing": "Housing Violations", "pothole": "Potholes", "noise": "Noise"}[top_key]
 
-    # Build all points for map plotting
-    all_points = []
-    for key, pts in risk_data.items():
-        for p in pts:
-            all_points.append(p)
+    # Build all points for map plotting (use the all_points built during fetch which has collection labels)
 
     return {
         "address": display_addr,
+        "neighborhood": neighborhood,
         "lat": clat, "lon": clon,
         "overall_score": overall,
         "overall_label": "SAFE" if overall >= 80 else "MODERATE RISK" if overall >= 50 else "HIGH RISK" if overall >= 25 else "CRITICAL",
-        "categories": {k: {"score": v, "label": risk_labels.get(v, "?"), "count": len(risk_data.get(k, []))} for k, v in scores.items()},
+        "categories": {k: {"score": v, "label": risk_labels.get(v, "?"), "count": risk_counts.get(k, 0)} for k, v in scores.items()},
         "nearby_dispatch_incidents": len(nearby_incidents),
         "correlations": correlations,
         "top_concern": top_concern,
@@ -1651,12 +1753,22 @@ async def report_photo(
         logger.error(f"[PhotoReport] Vision analysis failed: {e}")
         ai_analysis = f"Photo uploaded (AI analysis unavailable: {e})"
 
-    # Override category based on user description keywords
-    desc_lower = (description or "").lower()
+    # Override category based on user description keywords AND AI analysis
+    desc_lower = ((description or "") + " " + (ai_analysis or "")).lower()
     if any(w in desc_lower for w in ["sick", "unwell", "unconscious", "medical", "health", "hurt", "injured", "fallen", "collapsed", "overdose", "homeless"]):
         ai_category = "health"
     elif any(w in desc_lower for w in ["fire", "smoke", "burning"]):
         ai_category = "fire"
+    elif any(w in desc_lower for w in ["pothole", "crack", "hole in road", "road damage", "pavement"]):
+        ai_category = "pothole"
+    elif any(w in desc_lower for w in ["flood", "water", "puddle", "standing water"]):
+        ai_category = "flooding"
+    elif any(w in desc_lower for w in ["rat", "rodent", "mouse", "mice", "pest"]):
+        ai_category = "rodent"
+    elif any(w in desc_lower for w in ["tree", "branch", "fallen tree"]):
+        ai_category = "tree"
+    elif any(w in desc_lower for w in ["noise", "loud", "music", "construction noise"]):
+        ai_category = "noise"
 
     # Use description from user if AI analysis is empty
     final_description = description or ai_analysis or "Photo report"

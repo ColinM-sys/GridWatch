@@ -772,9 +772,8 @@
                     <button class="quick-btn" onclick="quickChat('Show rat and rodent activity near Brooklyn')">🐀 Rodents</button>
                     <button class="quick-btn" onclick="quickChat('Show crash history near Times Square')">🚗 Crashes</button>
                     <button class="quick-btn" onclick="riskReport()">📊 Risk Score</button>
-                    <label style="margin-left:auto;font-size:10px;color:#888;display:flex;align-items:center;gap:4px">
-                        <input type="checkbox" id="tts-enabled" checked> 🔊 TTS
-                    </label>
+                    <button class="quick-btn" id="tts-toggle" onclick="document.getElementById('tts-enabled').checked=!document.getElementById('tts-enabled').checked;this.style.opacity=document.getElementById('tts-enabled').checked?'1':'0.4';this.textContent=document.getElementById('tts-enabled').checked?'🔊 TTS ON':'🔇 TTS OFF'" style="margin-left:auto;opacity:0.4">🔇 TTS OFF</button>
+                    <input type="checkbox" id="tts-enabled" style="display:none">
                 </div>
                 <div class="chat-messages" id="chatMessages">
                     <div class="msg agent">
@@ -897,7 +896,7 @@
                     tileSize: 512,
                     maxzoom: 14
                 });
-                map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+                map.setTerrain({ source: 'mapbox-dem', exaggeration: 0 });
                 map.addLayer({
                     id: 'sky',
                     type: 'sky',
@@ -1152,6 +1151,7 @@
 
         function addMarkerToLayer(layerName, lngLat, html, popupHtml, options = {}) {
             // Dedupe: if a marker already exists in this layer within ~15m, merge popup and skip
+            if (options.noDedupe) { /* skip dedupe */ } else {
             const existing = (markerStore[layerName] || []).find(m => {
                 const a = m.getLngLat();
                 return Math.abs(a.lng - lngLat[0]) < 0.00015 && Math.abs(a.lat - lngLat[1]) < 0.00015;
@@ -1169,6 +1169,7 @@
                 }
                 return existing;
             }
+            } // end dedupe else
             const el = document.createElement('div');
             el.innerHTML = html;
             el.style.cursor = popupHtml ? 'pointer' : 'default';
@@ -1182,7 +1183,7 @@
                 el.classList.add('clickable-marker');
             }
 
-            const marker = new mapboxgl.Marker({ element: el, anchor: 'center', pitchAlignment: 'map', rotationAlignment: 'map' })
+            const marker = new mapboxgl.Marker({ element: el, anchor: 'center', pitchAlignment: 'viewport', rotationAlignment: 'viewport' })
                 .setLngLat(lngLat);
 
             if (popupHtml) {
@@ -2426,28 +2427,32 @@
             riskRunning = true;
             try {
             const address = prompt('Enter an address for risk assessment:', '200 Broadway Manhattan');
-            if (!address) return;
+            if (!address) { riskRunning = false; return; }
             const chatDiv = document.getElementById('chatMessages');
             chatDiv.innerHTML += `<div class="msg user"><div class="label">Dispatcher</div>Risk report for: ${address}</div>`;
             const thinkId = 'risk-' + Date.now();
             chatDiv.innerHTML += `<div class="msg agent" id="${thinkId}"><div class="label">GridWatch AI</div><span style="color:#76b900;animation:pulse-dot 1s infinite;">Analyzing neighborhood risk...</span></div>`;
             chatDiv.scrollTop = chatDiv.scrollHeight;
             try {
-                const resp = await fetch(`${API_URL}/api/risk/${encodeURIComponent(address)}`);
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 30000);
+                const resp = await fetch(`${API_URL}/api/risk/${encodeURIComponent(address)}`, {signal: controller.signal});
+                clearTimeout(timeout);
                 const d = await resp.json();
                 document.getElementById(thinkId)?.remove();
                 if (d.error) {
                     chatDiv.innerHTML += `<div class="msg agent"><div class="label">GridWatch AI</div>Could not find that address. Try again.</div>`;
                 } else {
                     const scoreColor = d.overall_score >= 80 ? '#76b900' : d.overall_score >= 50 ? '#ffcc00' : d.overall_score >= 25 ? '#ff8800' : '#ff2222';
-                    const catLines = Object.entries(d.categories).map(([k, v]) => {
+                    const catLines = Object.entries(d.categories).filter(([k, v]) => v.score > 0).sort((a,b) => b[1].score - a[1].score).map(([k, v]) => {
                         const emoji = {flooding:'🌊',rodent:'🐀',collision:'🚗',housing:'🏚️',pothole:'🕳️',noise:'🎵'}[k] || '⚠️';
-                        const color = v.score >= 75 ? '#ff2222' : v.score >= 50 ? '#ff8800' : v.score >= 25 ? '#ffcc00' : '#76b900';
-                        return `<div style="display:flex;justify-content:space-between;margin:2px 0"><span>${emoji} ${k}</span><span style="color:${color};font-weight:700">${v.label} (${v.count})</span></div>`;
-                    }).join('');
+                        const color = v.score >= 75 ? '#ff2222' : v.score >= 50 ? '#ff8800' : '#ffcc00';
+                        const vs = v.score >= 75 ? '▲▲ well above avg' : v.score >= 50 ? '▲ above avg' : '~ near avg';
+                        return `<div style="display:flex;justify-content:space-between;margin:2px 0"><span>${emoji} ${k}</span><span style="color:${color};font-weight:700">${v.label} <span style="font-size:10px;opacity:0.7">${vs}</span></span></div>`;
+                    }).join('') || '<div style="color:#76b900">All categories below NYC average</div>';
                     const corrLines = d.correlations.length ? `<div style="border-top:1px solid #333;margin-top:6px;padding-top:6px;color:#00ccff;font-size:11px">${d.correlations.map(c => '🔗 ' + c).join('<br>')}</div>` : '';
                     chatDiv.innerHTML += `<div class="msg agent"><div class="label">GridWatch AI</div>
-                        <div style="font-weight:700;font-size:13px;margin-bottom:6px">📊 RISK REPORT: ${d.address.split(',')[0]}</div>
+                        <div style="font-weight:700;font-size:13px;margin-bottom:6px">📊 RISK REPORT: ${d.neighborhood || d.address.split(',')[0]}</div>
                         <div style="font-size:24px;font-weight:900;color:${scoreColor};margin:8px 0">${d.overall_score}/100</div>
                         <div style="color:${scoreColor};font-weight:700;margin-bottom:8px">${d.overall_label}</div>
                         <div style="border-top:1px solid #333;padding-top:6px">${catLines}</div>
@@ -2459,17 +2464,29 @@
                     </div>`;
                     // Plot RAG points on map
                     if (d.rag_points && d.rag_points.length) {
+                        try {
                         clearMarkerLayer('rag');
+                        let plotted = 0;
                         d.rag_points.forEach(p => {
-                            const emoji = p.collection?.includes('flood') ? '🌊' : p.collection?.includes('rodent') ? '🐀' : p.collection?.includes('collision') ? '🚗' : p.collection?.includes('housing') ? '🏚️' : '⚠️';
-                            addMarkerToLayer('rag', [p.lon, p.lat], `<div style="font-size:14px">${emoji}</div>`, `<div style="font-size:11px">${p.collection || 'data'}</div>`);
+                            const plat = p.lat || p.latitude;
+                            const plon = p.lon || p.longitude;
+                            if (!plat || !plon) return;
+                            const c = p.collection||'';
+                            const emoji = c.includes('flood') ? '🌊' : c.includes('rodent') ? '🐀' : c.includes('collision') ? '🚗' : c.includes('housing') ? '🏚️' : c.includes('pothole') ? '🕳️' : c.includes('noise') ? '🎵' : '⚠️';
+                            const label = {flooding:'Flood/Sewer Report',rodent:'Rodent Complaint',collision:'Vehicle Collision',housing:'Housing Violation',pothole:'Street/Pothole',noise:'Noise Complaint'}[c] || c;
+                            const date = p.created_date || p.crash_date || p.inspectiondate || '';
+                            const dateStr = date ? `<br><span style="color:#888">${date.slice(0,10)}</span>` : '';
+                            addMarkerToLayer('rag', [plon, plat], `<div style="font-size:14px">${emoji}</div>`, `<div style="font-size:11px">${emoji} ${label}${dateStr}</div>`, {noDedupe: true});
+                            plotted++;
                         });
-                        chatDiv.innerHTML += `<div class="msg agent" style="font-size:11px;color:#76b900">📍 Plotted ${d.rag_points.length} historical records on map</div>`;
+                        if (plotted) chatDiv.innerHTML += `<div class="msg agent" style="font-size:11px;color:#76b900">📍 Plotted ${plotted} historical records on map</div>`;
+                        } catch(plotErr) { console.error('Plot error:', plotErr); }
                     }
                     // Fly to location
                     map.flyTo({ center: [d.lon, d.lat], zoom: 15, duration: 800 });
                 }
             } catch(e) {
+                console.error('Risk report error:', e);
                 document.getElementById(thinkId)?.remove();
                 chatDiv.innerHTML += `<div class="msg agent"><div class="label">GridWatch AI</div>Risk analysis failed. Server may be busy.</div>`;
             }
