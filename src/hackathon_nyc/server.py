@@ -1568,7 +1568,7 @@ async def report_photo(
         prompt = (
             "You are an NYC 311 dispatch photo analyst. Look at this photo carefully and identify any urban infrastructure issues.\\n\\n"
             "IMPORTANT RULES:\\n"
-            "- A fire hydrant is NOT a fire. A fire hydrant is category 'water'.\\n"
+            "- A fire hydrant is NOT a fire. A fire hydrant leaking or open is category 'flooding'.\\n"
             "- Only use 'fire' if you see actual flames, smoke, or burning.\\n"
             "- A person lying down or looking unwell is category 'health'.\\n"
             "- Standing water or puddles on the street is 'flooding'.\\n"
