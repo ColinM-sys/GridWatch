@@ -1350,6 +1350,10 @@ input[type="file"]{display:none}
 <div class="gps-dot"></div>
 <span>Detecting your location...</span>
 </div>
+<div class="field" id="addressField" style="display:none">
+<label>Location (GPS unavailable — enter address)</label>
+<input type="text" id="address" placeholder="e.g. 200 Broadway Manhattan" style="width:100%;background:#111118;border:1px solid #2a2a35;border-radius:8px;padding:12px;color:#e0e0e0;font-size:14px;font-family:inherit">
+</div>
 <div class="field">
 <label>Description (optional)</label>
 <textarea id="description" placeholder="What's the issue? e.g. 'Flooded street, water is knee-deep'"></textarea>
@@ -1366,7 +1370,8 @@ p=>{lat=p.coords.latitude;lng=p.coords.longitude;
 document.getElementById('gpsStatus').className='gps-status found';
 document.getElementById('gpsStatus').innerHTML='<div class="gps-dot"></div><span>Location found: '+lat.toFixed(5)+', '+lng.toFixed(5)+'</span>'},
 e=>{document.getElementById('gpsStatus').className='gps-status failed';
-document.getElementById('gpsStatus').innerHTML='<div class="gps-dot"></div><span>GPS unavailable - will try photo EXIF</span>'},
+document.getElementById('gpsStatus').innerHTML='<div class="gps-dot"></div><span>GPS unavailable - enter address below</span>';
+document.getElementById('addressField').style.display='block'},
 {enableHighAccuracy:true,timeout:15000}
 )}
 // Photo
@@ -1387,6 +1392,8 @@ btn.disabled=true;btn.textContent='Analyzing...';btn.classList.add('submitting')
 const fd=new FormData();
 fd.append('photo',photoFile);
 fd.append('description',document.getElementById('description').value);
+var addr=document.getElementById('address');
+if(addr&&addr.value)fd.append('address',addr.value);
 if(lat)fd.append('latitude',lat);
 if(lng)fd.append('longitude',lng);
 try{
@@ -1420,6 +1427,7 @@ def report_page():
 async def report_photo(
     photo: UploadFile = File(...),
     description: str = Form(""),
+    address: str = Form(""),
     latitude: float = Form(None),
     longitude: float = Form(None),
 ):
@@ -1483,6 +1491,20 @@ async def report_photo(
 
     final_lat = latitude or exif_lat
     final_lon = longitude or exif_lon
+    final_address = address
+
+    # If still no GPS, try geocoding the manual address
+    if (not final_lat or not final_lon) and address:
+        try:
+            from hackathon_nyc.tools.geocoding import geocode_address
+            geo = await geocode_address(address + ", New York City, NY")
+            if "error" not in geo and geo.get("lat"):
+                final_lat = float(geo["lat"])
+                final_lon = float(geo["lon"])
+                final_address = geo.get("display_name", address)
+                logger.info(f"[PhotoReport] Geocoded address: {final_address}")
+        except Exception as e:
+            logger.warning(f"[PhotoReport] Geocoding failed: {e}")
 
     # Analyze photo with Ollama llama3.2-vision:11b
     ai_analysis = ""
@@ -1564,6 +1586,7 @@ async def report_photo(
         source="citizen_photo",
         latitude=final_lat,
         longitude=final_lon,
+        address=final_address,
     )
     incident["ai_analysis"] = ai_analysis
     incident["photo_path"] = str(photo_path)
