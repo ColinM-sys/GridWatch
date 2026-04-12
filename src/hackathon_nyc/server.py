@@ -1112,6 +1112,9 @@ async def generate_chat(request: Request):
         # Model says no data but we have records
         if any(w in output.lower() for w in ("sorry", "no data", "not available", "cannot find", "don't have", "does not contain", "no crashes", "no record")):
             needs_override = True
+        # Model gave vague/unhelpful response
+        if any(w in output.lower() for w in ("could you please", "what specific", "of course!", "can you provide", "please provide")):
+            needs_override = True
         # Model talks about wrong topic
         topic_checks = [
             (("rat", "rodent", "mouse"), ("rodent", "rat", "pest", "inspection")),
