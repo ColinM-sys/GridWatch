@@ -2529,10 +2529,23 @@
                                       p.collection.includes('collis') ? '\u{1F4A5}' :
                                       p.collection.includes('housing') ? '\u{1F3DA}\uFE0F' :
                                       p.collection.includes('311') ? '\u{1F4DE}' : '\u{1F4CD}';
-                        const collName = (p.collection || '').replace('nyc_','').replace('_',' ');
+                        const collNames = {
+                            'nyc_flood_events': 'Flood Event',
+                            'nyc_rodent_inspections': 'Rodent Inspection',
+                            'nyc_collisions': 'Vehicle Collision',
+                            'nyc_housing_violations': 'Housing Violation',
+                            'nyc_potholes': 'Pothole Report',
+                            'nyc_311_current': '311 Complaint'
+                        };
+                        const prettyName = collNames[p.collection] || p.collection.replace('nyc_','').replace('_',' ');
                         addMarkerToLayer('rag', [p.lon, p.lat],
                             `<div style="font-size:22px;filter:drop-shadow(0 0 6px #ff00ff)">${emoji}</div>`,
-                            `<div style="font-size:12px"><b>${emoji} ${collName}</b><br><span style="color:#888">Historical record</span></div>`);
+                            `<div style="font-size:12px;min-width:180px">
+                                <div style="font-weight:700;color:#76b900;margin-bottom:4px">${emoji} ${prettyName}</div>
+                                <div style="color:#aaa">Lat: ${p.lat.toFixed(5)}</div>
+                                <div style="color:#aaa">Lng: ${p.lon.toFixed(5)}</div>
+                                <div style="color:#666;margin-top:4px;font-size:10px">NYC Open Data — Historical Record</div>
+                            </div>`);
                         bounds.extend([p.lon, p.lat]);
                     });
                     if (!bounds.isEmpty()) map.fitBounds(bounds, {padding: 80, maxZoom: 14, duration: 1500});
