@@ -1557,7 +1557,7 @@ async def report_photo(
 
     # Create the incident
     incident = db.create_incident(
-        title=f"Photo Report: {ai_category.replace('_', ' ').title()}"[:60],
+        title=(f"📷 {description[:40]}" if description else f"Photo Report: {ai_category.replace('_', ' ').title()}")[:60],
         category=ai_category,
         description=final_description,
         severity=ai_severity,
