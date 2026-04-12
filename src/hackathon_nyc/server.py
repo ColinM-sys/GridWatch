@@ -862,7 +862,7 @@ async def generate_chat(request: Request):
                     "worst", "dangerous", "most", "where are", "which area",
                     "concentration", "cluster", "problem area"]
     # Skip RAG for sitrep/status/dispatch queries — those use DB stats only
-    rag_skip = ["sitrep", "status", "give me a", "how many", "resolve", "assign", "update", "create", "delete", "immediate", "urgent", "dispatch", "need", "which incidents", "open incidents", "priority", "priorities"]
+    rag_skip = ["sitrep", "status", "give me a", "how many", "resolve", "assign", "update", "create", "delete", "immediate", "urgent", "dispatch", "need", "which incidents", "open incidents", "priority", "priorities", "hotspot", "worst"]
     skip_rag = any(s in user_input.lower() for s in rag_skip)
     if not skip_rag and any(t in user_input.lower() for t in rag_triggers):
         try:
