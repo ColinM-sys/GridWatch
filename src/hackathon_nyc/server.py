@@ -862,7 +862,7 @@ async def generate_chat(request: Request):
                     "worst", "dangerous", "most", "where are", "which area",
                     "concentration", "cluster", "problem area"]
     # Skip RAG for sitrep/status/dispatch queries — those use DB stats only
-    rag_skip = ["sitrep", "status", "report", "give me a", "how many", "resolve", "assign", "update", "create", "delete", "immediate", "urgent", "dispatch", "need", "which incidents", "open incidents", "priority", "priorities"]
+    rag_skip = ["sitrep", "status", "give me a", "how many", "resolve", "assign", "update", "create", "delete", "immediate", "urgent", "dispatch", "need", "which incidents", "open incidents", "priority", "priorities"]
     skip_rag = any(s in user_input.lower() for s in rag_skip)
     if not skip_rag and any(t in user_input.lower() for t in rag_triggers):
         try:
@@ -910,13 +910,10 @@ async def generate_chat(request: Request):
                             la1, lo1, la2, lo2 = map(radians, (la1, lo1, la2, lo2))
                             d = 2 * asin(sqrt(sin((la2-la1)/2)**2 + cos(la1)*cos(la2)*sin((lo2-lo1)/2)**2))
                             return R * d
-                        radius_miles = 5.0
+                        radius_miles = 1.5
                         filtered = [p for p in rag_points if _hav(clat, clon, p["lat"], p["lon"]) <= radius_miles]
-                        if filtered:
-                            rag_points = filtered
-                            geo_note = f"\nGEO FILTER: showing {len(filtered)} records within {radius_miles} miles of {place}."
-                        else:
-                            geo_note = ""
+                        rag_points = filtered  # Always apply filter, even if empty
+                        geo_note = f"\nGEO FILTER: {len(filtered)} records within {radius_miles} miles of {place}."
                     else:
                         geo_note = ""
                 else:
