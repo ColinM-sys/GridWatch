@@ -82,7 +82,8 @@ graph TB
 | Backend | FastAPI (Python), port 8000 |
 | Database | SQLite |
 | Vector DB | ChromaDB (1,800 docs, 6 collections) |
-| AI Model | NVIDIA Nemotron-Mini 4.2B via Ollama (on-device) |
+| AI Chat Model | NVIDIA Nemotron-Mini 4.2B via Ollama (on-device) |
+| Vision Model | LLaMA 3.2 Vision 11B via Ollama (photo analysis) |
 | Agent Skills | OpenClaw SKILL.md format |
 | Hardware | NVIDIA GB10 Grace Blackwell (Acer Veriton GN100) |
 | Voice/SMS | Twilio + Whisper |
@@ -252,14 +253,44 @@ report flooding at 200 Broadway Manhattan
 
 ## Citizen Reporting
 
-Citizens can report incidents through four channels. All reports are geocoded, categorized, and appear on the map in real time.
+Citizens can report incidents through six channels. All reports are geocoded, categorized, and appear on the map in real time.
 
 | Channel | How | Source Icon |
 |---|---|---|
 | Phone Call | Call the Twilio number, speak your report | :telephone: |
 | SMS/Text | Text the Twilio number | :iphone: |
 | Discord | DM the bot or @mention in a channel | :speech_balloon: |
+| Photo Report | Scan QR code, take photo with phone camera | :camera: |
 | Web Form | Click "+ New Incident" in the dispatch sidebar | :desktop_computer: |
+| AI Chat | Type "report [incident] at [address]" in chat | :robot: |
+
+### Photo Report with AI Vision Analysis
+Citizens scan a QR code → mobile page opens with camera access → take a photo → AI analyzes it automatically.
+
+**How it works:**
+1. Citizen scans QR code on the dispatch map (or opens `/report` URL)
+2. Takes a photo or uploads from gallery
+3. Browser captures GPS coordinates (HTTPS required)
+4. If GPS unavailable, manual address field appears as fallback
+5. Photo is sent to **LLaMA 3.2 Vision 11B** running locally on the GB10
+6. Vision model analyzes the image and detects:
+   - **Category** — flooding, fire, pothole, rodent, sewer, tree, health, etc.
+   - **Severity** — low, medium, high, critical
+   - **Description** — AI-generated description of what it sees
+7. Incident is auto-created with correct category, GPS, and AI description
+8. Nearby subscribers are alerted via SMS
+9. Incident appears on the dispatch map in real time
+
+**Supported detections:**
+| Photo shows | Detected as |
+|---|---|
+| Open fire hydrant / standing water | flooding |
+| Smoke or flames | fire |
+| Holes or cracks in road | street_condition |
+| Rats or pest evidence | rodent |
+| Person collapsed or unwell | health |
+| Fallen tree or large branch | tree |
+| Overflowing drain or sewer | sewer |
 
 ### Live Ticker
 Scrolling ticker across the top shows the most recent reports with source icons and timestamps. Pauses on hover.
