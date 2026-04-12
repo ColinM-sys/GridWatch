@@ -958,7 +958,7 @@ async def generate_chat(request: Request):
 
     # If model dumped raw JSON/stats, format it nicely
     import re
-    if '"by_status"' in ai_response or '"total"' in ai_response or '```yaml' in ai_response or '```json' in ai_response:
+    if 'by_status' in ai_response or 'by_category' in ai_response or '```yaml' in ai_response or '```json' in ai_response or '"total"' in ai_response:
         cleaned = re.sub(r'```(?:yaml|json)?\s*\n?', '', ai_response).strip()
         json_start = cleaned.find('{')
         if json_start >= 0:
@@ -1201,6 +1201,27 @@ async def generate_chat(request: Request):
         word = word_map.get(n, str(n))
         output = _re2.sub(r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+records?\b",
                           f"{n} records", output, count=1, flags=_re2.I)
+
+    # Final safety — catch any JSON/code blocks that slipped through
+    if '```' in output or ('by_status' in output and '{' in output):
+        cleaned = re.sub(r'```(?:yaml|json)?\s*\n?', '', output).strip()
+        json_start = cleaned.find('{')
+        if json_start >= 0:
+            json_end = cleaned.rfind('}') + 1
+            if json_end > json_start:
+                try:
+                    data = _json.loads(cleaned[json_start:json_end])
+                    if 'total' in data or 'by_status' in data:
+                        total = data.get('total', sum(data.get('by_status', {}).values()))
+                        lines = [f"SITREP - {total} total incidents:"]
+                        bs = data.get('by_status', {})
+                        lines.append(f"Open: {bs.get('open', 0)} | In Progress: {bs.get('in_progress', 0)} | Resolved: {bs.get('resolved', 0)}")
+                        if 'by_category' in data:
+                            cats = ', '.join(f"{k}: {v}" for k, v in sorted(data['by_category'].items(), key=lambda x: -x[1]))
+                            lines.append(f"By type: {cats}")
+                        output = '\n'.join(lines)
+                except Exception:
+                    pass
 
     return {"output": output, "rag_points": rag_points}
 
