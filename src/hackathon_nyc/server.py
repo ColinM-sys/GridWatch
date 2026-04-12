@@ -1566,11 +1566,19 @@ async def report_photo(
         photo_b64 = base64.b64encode(photo_bytes).decode("utf-8")
 
         prompt = (
-            "You are an NYC urban incident analyst. Analyze this photo and respond with EXACTLY this format:\\n"
+            "You are an NYC 311 dispatch photo analyst. Look at this photo carefully and identify any urban infrastructure issues.\\n\\n"
+            "IMPORTANT RULES:\\n"
+            "- A fire hydrant is NOT a fire. A fire hydrant is category 'water'.\\n"
+            "- Only use 'fire' if you see actual flames, smoke, or burning.\\n"
+            "- A person lying down or looking unwell is category 'health'.\\n"
+            "- Standing water or puddles on the street is 'flooding'.\\n"
+            "- Holes or cracks in the road is 'pothole' (category: street_condition).\\n"
+            "- Rats, mice, or pest evidence is 'rodent'.\\n"
+            "- If nothing looks wrong, say category 'other' with severity 'low'.\\n\\n"
+            "Respond with EXACTLY this format:\\n"
             "CATEGORY: <one of: flooding, fire, pothole, rodent, sewer, noise, street_condition, tree, water, health, other>\\n"
             "SEVERITY: <one of: low, medium, high, critical>\\n"
-            "DESCRIPTION: <1-2 sentence description of what you see and the issue>\\n\\n"
-            "Be specific about the urban issue visible in the photo."
+            "DESCRIPTION: <1-2 sentence description of what you see and the urban issue>"
         )
 
         async with aiohttp.ClientSession() as session:
