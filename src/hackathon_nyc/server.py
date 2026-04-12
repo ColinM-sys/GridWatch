@@ -1080,7 +1080,7 @@ async def generate_chat(request: Request):
 
     # For urgent/dispatch queries, override with server-side answer if model gave a bad response
     ql = user_input.lower()
-    if any(w in ql for w in ("urgent", "immediate", "dispatch", "priority", "critical", "need", "hotspot", "worst")):
+    if any(w in ql for w in ("urgent", "immediate", "dispatch", "priority", "critical", "need", "hotspot", "worst", "sitrep", "status")):
         incidents_list = db.list_incidents(limit=50)
         critical = [i for i in incidents_list if i.get("severity") in ("critical", "high")]
         stats = db.get_stats()
