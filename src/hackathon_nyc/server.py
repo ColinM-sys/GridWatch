@@ -910,7 +910,7 @@ async def generate_chat(request: Request):
                             la1, lo1, la2, lo2 = map(radians, (la1, lo1, la2, lo2))
                             d = 2 * asin(sqrt(sin((la2-la1)/2)**2 + cos(la1)*cos(la2)*sin((lo2-lo1)/2)**2))
                             return R * d
-                        radius_miles = 1.5
+                        radius_miles = 3.0
                         filtered = [p for p in rag_points if _hav(clat, clon, p["lat"], p["lon"]) <= radius_miles]
                         rag_points = filtered  # Always apply filter, even if empty
                         geo_note = f"\nGEO FILTER: {len(filtered)} records within {radius_miles} miles of {place}."
