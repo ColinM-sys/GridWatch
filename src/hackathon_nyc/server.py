@@ -1080,18 +1080,24 @@ async def generate_chat(request: Request):
 
     # For urgent/dispatch queries, override with server-side answer if model gave a bad response
     ql = user_input.lower()
-    if any(w in ql for w in ("urgent", "immediate", "dispatch", "priority", "critical", "need")):
+    if any(w in ql for w in ("urgent", "immediate", "dispatch", "priority", "critical", "need", "hotspot", "worst")):
         incidents_list = db.list_incidents(limit=50)
         critical = [i for i in incidents_list if i.get("severity") in ("critical", "high")]
+        stats = db.get_stats()
+        cat_emoji = {"flooding": "🌊", "sewer": "🚰", "noise": "🎵", "rodent": "🐀", "heat": "🥶", "tree": "🌳", "street_condition": "🕳️", "water": "💧", "health": "🏥", "fire": "🔥", "other": "⚠️", "pothole": "🕳️"}
+        lines = [f"DISPATCH STATUS — {stats.get('total', 0)} total incidents:"]
+        lines.append(f"Open: {stats.get('open', 0)} | In Progress: {stats.get('in_progress', 0)} | Resolved: {stats.get('resolved', 0)}")
+        if stats.get('by_category'):
+            cat_lines = []
+            for k, v in sorted(stats['by_category'].items(), key=lambda x: -x[1]):
+                cat_lines.append(f"  {cat_emoji.get(k, '⚠️')} {k}: {v}")
+            lines.append("By type:\n" + "\n".join(cat_lines))
         if critical:
-            lines = [f"{len(critical)} incidents need immediate attention:"]
+            lines.append(f"\n🚨 {len(critical)} CRITICAL/HIGH priority:")
             for c in critical[:5]:
-                emoji = {"flooding": "🌊", "sewer": "🚰", "rodent": "🐀", "noise": "🎵", "heat": "🥶", "health": "🏥", "tree": "🌳", "street_condition": "🕳️"}.get(c.get("category"), "⚠️")
-                lines.append(f"  {emoji} {c.get('title', '?')[:45]} — {c.get('severity').upper()} at {c.get('address', 'unknown')[:35]}")
-            ai_response = "\n".join(lines)
-        else:
-            stats = db.get_stats()
-            ai_response = f"No critical/high severity incidents right now. {stats.get('total', 0)} total incidents, {stats.get('open', 0)} open."
+                e = cat_emoji.get(c.get("category"), "⚠️")
+                lines.append(f"  {e} {c.get('title', '?')[:45]} — {c.get('severity','').upper()}")
+        ai_response = "\n".join(lines)
 
     # Build final response
     # Strip the action block from the visible response
