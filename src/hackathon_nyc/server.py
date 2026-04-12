@@ -862,7 +862,7 @@ async def generate_chat(request: Request):
                     "worst", "dangerous", "most", "where are", "which area",
                     "concentration", "cluster", "problem area"]
     # Skip RAG for sitrep/status/dispatch queries — those use DB stats only
-    rag_skip = ["sitrep", "status", "report", "give me a", "how many", "resolve", "assign", "update", "create", "delete"]
+    rag_skip = ["sitrep", "status", "report", "give me a", "how many", "resolve", "assign", "update", "create", "delete", "immediate", "urgent", "dispatch", "need", "which incidents", "open incidents", "priority", "priorities"]
     skip_rag = any(s in user_input.lower() for s in rag_skip)
     if not skip_rag and any(t in user_input.lower() for t in rag_triggers):
         try:
@@ -1089,15 +1089,24 @@ async def generate_chat(request: Request):
         output = clean_response or ai_response
 
     # If model dumped raw field names, replace with clean summary
-    raw_indicators = ['sensor_id:', 'inspection_type:', 'job_ticket', 'bbl:', 'boro_code:', 'on_street_name:', 'crash_date:', 'violation', 'defnum', 'the_geom', 'number_of_persons']
-    if any(ind in output for ind in raw_indicators) and rag_points:
+    raw_indicators = ['sensor_id:', 'inspection_type:', 'job_ticket', 'bbl:', 'boro_code:', 'on_street_name:', 'crash_date:', 'violation', 'defnum', 'the_geom', 'number_of_persons', 'coordinates', 'MultiLineString', 'MultiPolygon', '"id":', '"category":', '"severity":']
+    if any(ind in output for ind in raw_indicators) or (output.strip().startswith('[') and len(output) > 50):
         # Model failed to summarize — generate server-side summary
-        collection_counts = {}
-        for p in rag_points:
-            coll = p.get('collection', 'unknown').replace('nyc_', '').replace('_', ' ').title()
-            collection_counts[coll] = collection_counts.get(coll, 0) + 1
-        summary = f"Found {len(rag_points)} records: " + ", ".join(f"{v} {k.lower()}" for k, v in sorted(collection_counts.items(), key=lambda x: -x[1]))
-        output = summary
+        if rag_points:
+            collection_counts = {}
+            for p in rag_points:
+                coll = p.get('collection', 'unknown').replace('nyc_', '').replace('_', ' ').title()
+                collection_counts[coll] = collection_counts.get(coll, 0) + 1
+            output = f"Found {len(rag_points)} records: " + ", ".join(f"{v} {k.lower()}" for k, v in sorted(collection_counts.items(), key=lambda x: -x[1]))
+        else:
+            # Fallback to dispatch stats
+            stats = db.get_stats()
+            incidents_list = db.list_incidents(limit=50)
+            critical = [i for i in incidents_list if i.get("severity") in ("critical", "high")]
+            lines = [f"{stats.get('total', 0)} active incidents, {len(critical)} need immediate attention:"]
+            for c in critical[:5]:
+                lines.append(f"  - {c.get('title', '?')[:50]} ({c.get('severity')}) at {c.get('address', '?')[:40]}")
+            output = "\n".join(lines)
 
     # Save to history
     CHAT_HISTORY.append({"role": "user", "content": user_input})
