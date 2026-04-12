@@ -1080,6 +1080,21 @@ async def generate_chat(request: Request):
         except Exception as e:
             action_result = f"Action failed: {e}"
 
+    # For urgent/dispatch queries, override with server-side answer if model gave a bad response
+    ql = user_input.lower()
+    if any(w in ql for w in ("urgent", "immediate", "dispatch", "priority", "critical", "need")):
+        incidents_list = db.list_incidents(limit=50)
+        critical = [i for i in incidents_list if i.get("severity") in ("critical", "high")]
+        if critical:
+            lines = [f"{len(critical)} incidents need immediate attention:"]
+            for c in critical[:5]:
+                emoji = {"flooding": "🌊", "sewer": "🚰", "rodent": "🐀", "noise": "🎵", "heat": "🥶", "health": "🏥", "tree": "🌳", "street_condition": "🕳️"}.get(c.get("category"), "⚠️")
+                lines.append(f"  {emoji} {c.get('title', '?')[:45]} — {c.get('severity').upper()} at {c.get('address', 'unknown')[:35]}")
+            ai_response = "\n".join(lines)
+        else:
+            stats = db.get_stats()
+            ai_response = f"No critical/high severity incidents right now. {stats.get('total', 0)} total incidents, {stats.get('open', 0)} open."
+
     # Build final response
     # Strip the action block from the visible response
     clean_response = re.sub(r'```action\s*\n.*?\n```', '', ai_response, flags=re.DOTALL).strip()
