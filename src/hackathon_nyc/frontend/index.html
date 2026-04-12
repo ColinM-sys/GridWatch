@@ -2529,9 +2529,10 @@
                                       p.collection.includes('collis') ? '\u{1F4A5}' :
                                       p.collection.includes('housing') ? '\u{1F3DA}\uFE0F' :
                                       p.collection.includes('311') ? '\u{1F4DE}' : '\u{1F4CD}';
+                        const collName = (p.collection || '').replace('nyc_','').replace('_',' ');
                         addMarkerToLayer('rag', [p.lon, p.lat],
                             `<div style="font-size:22px;filter:drop-shadow(0 0 6px #ff00ff)">${emoji}</div>`,
-                            `<b>RAG hit (${p.collection})</b><br>${p.label}`);
+                            `<div style="font-size:12px"><b>${emoji} ${collName}</b><br><span style="color:#888">Historical record</span></div>`);
                         bounds.extend([p.lon, p.lat]);
                     });
                     if (!bounds.isEmpty()) map.fitBounds(bounds, {padding: 80, maxZoom: 14, duration: 1500});
