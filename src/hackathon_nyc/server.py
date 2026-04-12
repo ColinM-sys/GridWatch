@@ -1599,24 +1599,25 @@ async def report_photo(
                     ai_analysis = ai_text
                     logger.info(f"[PhotoReport] AI analysis: {ai_text[:200]}")
 
-                    # Parse category
+                    # Parse category (handle markdown bold **CATEGORY:** etc)
+                    import re as _re3
                     for line in ai_text.split("\n"):
-                        line_lower = line.strip().lower()
-                        if line_lower.startswith("category:"):
-                            cat = line_lower.split(":", 1)[1].strip()
+                        line_clean = _re3.sub(r'\*+', '', line).strip().lower()
+                        if line_clean.startswith("category:"):
+                            cat = line_clean.split(":", 1)[1].strip()
                             valid_cats = ["flooding", "fire", "pothole", "rodent", "sewer",
-                                          "noise", "street_condition", "tree", "water", "other"]
+                                          "noise", "street_condition", "tree", "water", "health", "other"]
                             for vc in valid_cats:
                                 if vc in cat:
                                     ai_category = vc
                                     break
-                        elif line_lower.startswith("severity:"):
-                            sev = line_lower.split(":", 1)[1].strip()
+                        elif line_clean.startswith("severity:"):
+                            sev = line_clean.split(":", 1)[1].strip()
                             for vs in ["low", "medium", "high", "critical"]:
                                 if vs in sev:
                                     ai_severity = vs
                                     break
-                        elif line_lower.startswith("description:"):
+                        elif line_clean.startswith("description:"):
                             ai_analysis = line.split(":", 1)[1].strip()
                 else:
                     logger.warning(f"[PhotoReport] Ollama returned {resp.status}")
