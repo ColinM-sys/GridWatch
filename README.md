@@ -151,6 +151,17 @@ Open `http://DEVICE_IP:8080` from any browser on your network.
 > **Minimum to run:** Mapbox token + Ollama. Map, dispatch, AI chat, cameras, and heatmap work without Discord/Twilio.
 > **Full features:** Add Twilio (free trial $15) for phone calls, SMS intake, and proximity alerts. Add Discord bot token for Discord reporting. Add ngrok for Twilio webhooks.
 
+### Production Deployment — No Twilio Needed
+Twilio is used for the hackathon demo only. In production, a city would use their existing telecom provider for voice/SMS:
+
+| Provider | What it provides |
+|---|---|
+| **Bandwidth.com** | Direct carrier API — what Twilio uses under the hood. Cheaper, no middleman, no 10DLC restrictions for government entities |
+| **Verizon/AT&T/T-Mobile Business** | SIP trunking + SMS API from the city's existing telecom contract |
+| **Self-hosted PBX (FreePBX/Asterisk)** | Free open-source phone system on city servers |
+
+GridWatch's webhook endpoints (`/api/voice/incoming`, `/api/sms/incoming`) accept standard telephony protocols — any provider that supports webhooks can replace Twilio with zero code changes. The city gets a dedicated line from their existing telecom provider and points the webhooks at GridWatch.
+
 ```bash
 # Set environment variables (optional — only needed for Discord/Twilio features)
 export DISCORD_TOKEN=your_discord_bot_token
