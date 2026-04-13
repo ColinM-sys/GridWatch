@@ -2,7 +2,7 @@
 
 AI-powered urban intelligence and dispatch platform for New York City. Multi-agent system with live data feeds, predictive analytics, citizen reporting (phone/SMS/Discord), and RAG-powered dispatch chat — all running on-device with NVIDIA Nemotron via the GB10 Grace Blackwell Superchip.
 
-Built for **Spark Hack NYC 2026** (April 10-12, 2026).
+Created for **Spark Hack NYC 2026** (April 10-12, 2026) — hosted by **NVIDIA x Acer x Antler**.
 
 ---
 
@@ -412,4 +412,4 @@ Confirmed incidents show affected area rings scaled by category:
 
 ## License
 
-Built for Spark Hack NYC 2026. All rights reserved.
+Created for Spark Hack NYC 2026 by NVIDIA x Acer x Antler. All rights reserved.
