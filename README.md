@@ -412,4 +412,4 @@ Confirmed incidents show affected area rings scaled by category:
 
 ## License
 
-Created for Spark Hack NYC 2026 by NVIDIA x Acer x Antler. All rights reserved.
+MIT License. See [LICENSE](LICENSE) for details.
