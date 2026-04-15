@@ -413,3 +413,10 @@ Confirmed incidents show affected area rings scaled by category:
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
+
+
+---
+
+## Author
+
+Built by **Colin McDonough** — [LinkedIn](https://www.linkedin.com/in/colinmcdonoughmarketing) · [GitHub](https://github.com/ColinM-sys)
